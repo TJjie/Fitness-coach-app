@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Serif+Display:ital@0;1&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#F7F6F2;--surface:#fff;--s2:#F0EEE9;--border:rgba(0,0,0,.08);--borderS:rgba(0,0,0,.14);--text:#1A1916;--t2:#6B6860;--t3:#9C9A94;--accent:#2D6A4F;--alight:#E8F4EE;--amid:#52B788;--amber:#B45309;--amberL:#FEF3C7;--red:#991B1B;--redL:#FEE2E2;--blue:#1D4ED8;--blueL:#EFF6FF;--r:12px;--rL:16px;--rs:8px}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.5;min-height:600px}
+.app{display:flex;height:600px;overflow:hidden;border-radius:12px;border:1px solid var(--border)}
+.sidebar{width:210px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+.slogo{padding:18px 18px 14px;border-bottom:1px solid var(--border)}
+.lmark{font-family:'DM Serif Display',serif;font-size:17px;color:var(--accent)}
+.lsub{font-size:10px;color:var(--t3);letter-spacing:.8px;text-transform:uppercase;margin-top:1px}
+.snav{flex:1;padding:10px 8px;display:flex;flex-direction:column;gap:2px}
+.ni{display:flex;align-items:center;gap:9px;padding:8px 11px;border-radius:var(--rs);cursor:pointer;color:var(--t2);font-size:13px;font-weight:400;transition:all .15s;border:none;background:none;width:100%;text-align:left;font-family:'DM Sans',sans-serif}
+.ni:hover{background:var(--s2);color:var(--text)}
+.ni.active{background:var(--alight);color:var(--accent);font-weight:500}
+.sfoot{padding:12px 14px;border-top:1px solid var(--border)}
+.cbadge{display:flex;align-items:center;gap:10px}
+.cav{width:30px;height:30px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:white;flex-shrink:0}
+.main{flex:1;overflow-y:auto;background:var(--bg)}
+.page{padding:24px 28px;max-width:860px}
+.ptitle{font-family:'DM Serif Display',serif;font-size:24px;color:var(--text);letter-spacing:-.5px}
+.psub{font-size:12px;color:var(--t3);margin-top:2px;margin-bottom:20px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--rL);padding:18px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.csm{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.scard{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px}
+.slabel{font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.7px;font-weight:500}
+.sval{font-family:'DM Serif Display',serif;font-size:26px;color:var(--text);margin-top:3px}
+.ssub{font-size:11px;color:var(--t3);margin-top:1px}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:var(--rs);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;cursor:pointer;border:1px solid transparent;transition:all .15s}
+.btnP{background:var(--accent);color:white;border-color:var(--accent)}
+.btnP:hover{background:#245c43}
+.btnP:disabled{opacity:.5;cursor:not-allowed}
+.btnS{background:var(--surface);color:var(--text);border-color:var(--borderS)}
+.btnS:hover{background:var(--s2)}
+.btnG{background:transparent;color:var(--t2);border-color:transparent}
+.btnG:hover{background:var(--s2);color:var(--text)}
+.btnAI{background:var(--accent);color:white;border:none;font-size:11px;padding:6px 12px}
+.tag{display:inline-flex;align-items:center;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:500}
+.tg{background:var(--alight);color:var(--accent)}
+.ta{background:var(--amberL);color:var(--amber)}
+.tr{background:var(--redL);color:var(--red)}
+.tb{background:var(--blueL);color:var(--blue)}
+.tgr{background:var(--s2);color:var(--t2)}
+.av{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500;color:white;flex-shrink:0}
+.avsm{width:28px;height:28px;font-size:10px}
+.avlg{width:48px;height:48px;font-size:16px}
+.si{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
+.si:last-child{border-bottom:none}
+.cr{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);cursor:pointer;transition:opacity .1s}
+.cr:hover{opacity:.75}
+.cr:last-child{border-bottom:none}
+.fg{margin-bottom:14px}
+.fl{display:block;font-size:11px;font-weight:500;color:var(--t2);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
+.fi{width:100%;padding:8px 12px;border:1px solid var(--borderS);border-radius:var(--rs);font-family:'DM Sans',sans-serif;font-size:13px;color:var(--text);background:var(--surface);outline:none;transition:border-color .15s}
+.fi:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(45,106,79,.1)}
+.fta{resize:vertical;min-height:70px}
+.fsel{appearance:none;background-image:url("data:image/svg+xml,%3Csvg width='10' height='6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236B6860' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px}
+.shd{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.stitle{font-size:11px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:.6px}
+.aip{background:var(--surface);border:1px solid var(--border);border-radius:var(--rL);overflow:hidden}
+.aiph{padding:12px 16px;background:rgba(45,106,79,.04);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:9px}
+.aiic{width:26px;height:26px;border-radius:7px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;color:white}
+.aipb{padding:14px 16px}
+.aires{background:var(--alight);border-radius:var(--rs);padding:12px;font-size:13px;line-height:1.7;color:var(--text);border-left:3px solid var(--amid)}
+.aiprow{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.aic{padding:5px 12px;border-radius:20px;font-size:11px;border:1px solid var(--borderS);background:var(--surface);cursor:pointer;color:var(--t2);transition:all .15s;font-family:'DM Sans',sans-serif}
+.aic:hover{background:var(--alight);border-color:var(--accent);color:var(--accent)}
+.aiir{display:flex;gap:7px;margin-top:10px}
+.aiin{flex:1;padding:7px 11px;border:1px solid var(--borderS);border-radius:var(--rs);font-family:'DM Sans',sans-serif;font-size:12px;outline:none;background:var(--surface);color:var(--text)}
+.aiin:focus{border-color:var(--accent)}
+.mb{display:none;position:fixed;bottom:0;left:0;right:0;background:white;border-top:1px solid var(--border);padding:6px 0 10px;z-index:50}
+.mbi{display:flex;justify-content:space-around}
+.mbitem{display:flex;flex-direction:column;align-items:center;gap:2px;padding:3px 10px;cursor:pointer;color:var(--t3);font-size:10px;border:none;background:none;font-family:'DM Sans',sans-serif}
+.mbitem.active{color:var(--accent)}
+.mback{position:fixed;inset:0;background:rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px;backdrop-filter:blur(2px)}
+.modal{background:white;border-radius:var(--rL);padding:24px;width:100%;max-width:500px;max-height:80vh;overflow-y:auto}
+.ldots{display:inline-flex;gap:4px}
+.ldot{width:5px;height:5px;border-radius:50%;background:var(--accent);animation:dp 1.2s ease-in-out infinite}
+.ldot:nth-child(2){animation-delay:.2s}
+.ldot:nth-child(3){animation-delay:.4s}
+@keyframes dp{0%,80%,100%{opacity:.2;transform:scale(.8)}40%{opacity:1;transform:scale(1)}}
+.fi2{animation:fi2 .3s ease}
+@keyframes fi2{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+.sbar{display:flex;align-items:flex-end;gap:2px;height:36px}
+.sb{flex:1;border-radius:2px;background:var(--amid);opacity:.55;min-width:3px;transition:opacity .15s}
+.sb:hover{opacity:1}
+.tli{display:flex;gap:12px;padding-bottom:18px;position:relative}
+.tli::before{content:'';position:absolute;left:13px;top:26px;bottom:0;width:1px;background:var(--border)}
+.tli:last-child::before{display:none}
+.tldot{width:26px;height:26px;border-radius:50%;background:var(--alight);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
+.sgrid{display:grid;grid-template-columns:90px repeat(5,1fr);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.shdr{background:var(--s2);padding:8px;font-size:10px;font-weight:600;text-align:center;text-transform:uppercase;letter-spacing:.5px;color:var(--t2);border-bottom:1px solid var(--border)}
+.stime{background:var(--s2);padding:8px 10px;font-size:11px;color:var(--t3);border-bottom:1px solid var(--border);border-right:1px solid var(--border);display:flex;align-items:center}
+.scell{padding:4px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);min-height:46px}
+.scell:last-child{border-right:none}
+.sev{background:var(--alight);border-left:3px solid var(--accent);border-radius:3px;padding:4px 6px;font-size:10px;font-weight:500;color:var(--accent);cursor:pointer}
+.savail{background:#f0f7f4;border:1.5px dashed var(--amid);border-radius:3px;height:100%;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:.6;font-size:10px;color:var(--accent);transition:opacity .15s}
+.savail:hover{opacity:1}
+.tslot{display:flex;align-items:center;padding:11px 14px;border:1.5px solid var(--borderS);border-radius:var(--rs);cursor:pointer;margin-bottom:7px;transition:all .15s;font-size:13px}
+.tslot:hover{border-color:var(--accent);background:var(--alight);color:var(--accent)}
+.tslot.sel{border-color:var(--accent);background:var(--accent);color:white}
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--borderS);border-radius:2px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState}=React;
+
+const MC=[
+  {id:1,name:'Sarah Chen',ini:'SC',col:'#2D6A4F',goal:'Build lean muscle & improve posture',freq:'3x/week',contact:'+1 415 555-0191',email:'sarah@email.com',start:'2024-09-15',status:'Active',injuries:'Mild lower back tightness',notes:'Responds well to verbal encouragement. Prefers mornings.',next:'Tomorrow 9:00 AM'},
+  {id:2,name:'Marcus Webb',ini:'MW',col:'#1D4ED8',goal:'Athletic performance & injury prevention',freq:'4x/week',contact:'+1 415 555-0234',email:'marcus@email.com',start:'2024-07-01',status:'Active',injuries:'Right shoulder impingement (managed)',notes:'Former basketball player. Highly motivated.',next:'Thu 7:00 AM'},
+  {id:3,name:'Priya Patel',ini:'PP',col:'#7C3AED',goal:'Weight management & general fitness',freq:'2x/week',contact:'+1 415 555-0187',email:'priya@email.com',start:'2025-01-10',status:'Active',injuries:'None',notes:'Beginner. Building confidence.',next:'Fri 6:30 PM'},
+  {id:4,name:'James Thornton',ini:'JT',col:'#B45309',goal:'Marathon prep & endurance',freq:'3x/week',contact:'+1 415 555-0312',email:'james@email.com',start:'2024-05-20',status:'Follow-up needed',injuries:'IT band tightness',notes:'Missed last 2 sessions. Check in needed.',next:'Not scheduled'},
+];
+const MS=[
+  {id:1,cid:1,date:'Apr 14',type:'Lower Body / Glutes',exs:'Hip thrusts 3×12 @ 80kg, Romanian deadlifts 4×10 @ 60kg, Cable kickbacks 3×15',notes:'Great session. Sarah hit a new PR on hip thrusts.',cond:'High energy, fully rested',prog:'Hip thrust strength up 10kg from last month.',next:'Increase hip thrust to 85kg next time. Add single-leg variation.'},
+  {id:2,cid:1,date:'Apr 10',type:'Back & Posterior Chain',exs:'Deadlifts 4×6 @ 75kg, Lat pulldowns 3×10 @ 45kg, Bent-over rows 3×10 @ 40kg',notes:'Slight fatigue from busy week. Reduced volume accordingly.',cond:'Moderate energy, stressed',prog:'Lower back holding well. Grip strength improving.',next:'Check energy. Full volume if rested.'},
+  {id:3,cid:1,date:'Apr 7',type:'Lower Body / Strength',exs:'Squats 4×8 @ 65kg, Leg press 3×12 @ 120kg, Walking lunges 3×10 each',notes:'Focused on depth. Consistent improvement.',cond:'Good, slept well',prog:'Squat depth improved. Knees tracking better.',next:'Increase squat to 70kg next session.'},
+  {id:4,cid:2,date:'Apr 15',type:'Upper Body / Push-Pull',exs:'Bench press 5×5 @ 100kg, Pull-ups 4×8, Overhead press 4×8 @ 60kg',notes:'Shoulder felt stable throughout.',cond:'Strong energy',prog:'Bench form improved. Shoulder stability better.',next:'Test 1RM on bench. Add face pulls.'},
+  {id:5,cid:3,date:'Apr 13',type:'Full Body Foundation',exs:'Bodyweight squats 3×15, Assisted push-ups 3×10, Plank 3×30s',notes:'Priya completed all sets without stopping for the first time!',cond:'Nervous at start, confident by end',prog:'Huge confidence boost.',next:'Introduce goblet squat 8kg.'},
+];
+const SLOTS=[
+  {id:1,day:'Mon',time:'7:00 AM',booked:false},{id:2,day:'Mon',time:'9:00 AM',booked:true,client:'Sarah Chen'},
+  {id:3,day:'Mon',time:'11:00 AM',booked:false},{id:4,day:'Tue',time:'7:00 AM',booked:true,client:'Marcus Webb'},
+  {id:5,day:'Tue',time:'6:30 PM',booked:false},{id:6,day:'Wed',time:'8:00 AM',booked:true,client:'Priya Patel'},
+  {id:7,day:'Wed',time:'10:00 AM',booked:false},{id:8,day:'Thu',time:'7:00 AM',booked:true,client:'Marcus Webb'},
+  {id:9,day:'Thu',time:'9:00 AM',booked:false},{id:10,day:'Fri',time:'6:30 PM',booked:true,client:'Priya Patel'},
+];
+
+function AIPanel({client,session,onClose}){
+  const [q,setQ]=useState('');
+  const [res,setRes]=useState('');
+  const [loading,setLoading]=useState(false);
+  const chips=client?[`Training tips for ${client.name}'s next session`,'Summarize session for client to read','Recovery advice for today','Exercise cues for compound movements']:['Generate a weekly training tip','Form cues for a compound lift','Recovery reminders for fatigue'];
+  const run=async(text)=>{
+    const txt=text||q; if(!txt.trim())return;
+    setLoading(true);setRes('');setQ('');
+    const sys=`You are an expert personal trainer coach assistant. Be concise (under 150 words), practical, and professional. No medical claims. Sound like an experienced coach.${client?` Client: ${client.name}. Goal: ${client.goal}. Limitations: ${client.injuries||'none'}.`:''}${session?` Last session (${session.date}): ${session.type}. Exercises: ${session.exs}. Notes: ${session.notes}.`:''}`;
+    try{
+      const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,system:sys,messages:[{role:'user',content:txt}]})});
+      const d=await r.json();
+      setRes(d.content?.[0]?.text||'No response.');
+    }catch(e){setRes('Connection error. Please try again.');}
+    setLoading(false);
+  };
+  return(
+    <div className="aip fi2">
+      <div className="aiph">
+        <div className="aiic">✦</div>
+        <div>
+          <div style={{fontSize:12,fontWeight:600}}>AI Coaching Assistant</div>
+          <div style={{fontSize:10,color:'var(--t3)',marginTop:1}}>{client?`Context: ${client.name}`:'General mode'}</div>
+        </div>
+        {onClose&&<button onClick={onClose} className="btn btnG" style={{marginLeft:'auto',padding:'3px 7px',fontSize:14}}>×</button>}
+      </div>
+      <div className="aipb">
+        <div className="aiprow">{chips.slice(0,3).map((p,i)=><button key={i} className="aic" onClick={()=>run(p)}>{p}</button>)}</div>
+        <div className="aiir">
+          <input className="aiin" placeholder="Ask about training, cues, this client..." value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==='Enter'&&run()} />
+          <button className="btn btnP" style={{padding:'6px 12px',fontSize:12}} onClick={()=>run()} disabled={loading}>{loading?'...':'→'}</button>
+        </div>
+        {loading&&<div style={{padding:'16px 0',textAlign:'center'}}><div className="ldots"><div className="ldot"/><div className="ldot"/><div className="ldot"/></div><div style={{fontSize:11,color:'var(--t3)',marginTop:6}}>Generating...</div></div>}
+        {res&&!loading&&<div className="fi2" style={{marginTop:12}}><div className="aires">{res}</div><div style={{display:'flex',gap:7,marginTop:8}}><button className="btn btnS" style={{fontSize:11,padding:'4px 10px'}} onClick={()=>navigator.clipboard?.writeText(res)}>Copy</button><button className="btn btnG" style={{fontSize:11,padding:'4px 10px'}} onClick={()=>setRes('')}>Clear</button></div></div>}
+      </div>
+    </div>
+  );
+}
+
+function Dashboard({clients,sessions,nav}){
+  const up=[{c:'Sarah Chen',t:'Tomorrow 9:00 AM',type:'Lower Body',col:'#2D6A4F'},{c:'Marcus Webb',t:'Thu 7:00 AM',type:'Upper Body',col:'#1D4ED8'},{c:'Priya Patel',t:'Fri 6:30 PM',type:'Full Body',col:'#7C3AED'}];
+  const fu=clients.filter(c=>c.status==='Follow-up needed');
+  return(
+    <div className="page">
+      <div className="ptitle">Good morning, Alex.</div>
+      <div className="psub">Wednesday Apr 16 · {clients.filter(c=>c.status==='Active').length} active clients</div>
+      <div className="g4" style={{marginBottom:18}}>
+        {[{l:'Active Clients',v:clients.filter(c=>c.status==='Active').length,s:'1 new this month'},{l:'Sessions This Week',v:8,s:'3 completed'},{l:'This Month',v:34,s:'↑ 12% vs last'},{l:'Follow-ups',v:fu.length,s:fu.length?fu[0].name:'All clear'}].map((s,i)=>(
+          <div key={i} className="scard"><div className="slabel">{s.l}</div><div className="sval">{s.v}</div><div className="ssub">{s.s}</div></div>
+        ))}
+      </div>
+      <div className="g2" style={{marginBottom:16}}>
+        <div className="card">
+          <div className="shd"><div className="stitle">Upcoming</div><button className="btn btnG" style={{fontSize:11,padding:'3px 8px'}} onClick={()=>nav('schedule')}>All →</button></div>
+          {up.map((s,i)=><div key={i} className="si"><div style={{width:7,height:7,borderRadius:'50%',background:s.col,marginTop:5,flexShrink:0}}/><div style={{flex:1}}><div style={{fontWeight:500,fontSize:13}}>{s.c}</div><div style={{fontSize:11,color:'var(--t3)',marginTop:1}}>{s.t} · {s.type}</div></div><span className="tag tg" style={{fontSize:10}}>Confirmed</span></div>)}
+        </div>
+        <div className="card">
+          <div className="shd"><div className="stitle">Recent Sessions</div></div>
+          {sessions.slice(0,3).map(s=>{const c=clients.find(cl=>cl.id===s.cid);return(<div key={s.id} className="si"><div className="av avsm" style={{background:c?.col}}>{c?.ini}</div><div style={{flex:1,minWidth:0}}><div style={{fontWeight:500,fontSize:13}}>{c?.name}</div><div style={{fontSize:11,color:'var(--t3)',marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.type} · {s.date}</div></div></div>);})}
+        </div>
+      </div>
+      {fu.length>0&&<div className="card" style={{borderLeft:'3px solid var(--amber)',background:'var(--amberL)',marginBottom:16}}>
+        <div className="shd"><div className="stitle" style={{color:'var(--amber)'}}>⚠ Follow-up Needed</div></div>
+        {fu.map(c=><div key={c.id} style={{display:'flex',alignItems:'center',gap:10,padding:'6px 0'}}><div className="av avsm" style={{background:c.col}}>{c.ini}</div><div style={{flex:1}}><div style={{fontWeight:500,fontSize:13}}>{c.name}</div><div style={{fontSize:11,color:'var(--t2)'}}>{c.notes}</div></div><button className="btn btnS" style={{fontSize:11,padding:'4px 9px'}} onClick={()=>nav('client',c.id)}>View</button></div>)}
+      </div>}
+      <AIPanel />
+    </div>
+  );
+}
+
+function ClientsList({clients,nav,onAdd}){
+  const [search,setSearch]=useState('');
+  const f=clients.filter(c=>c.name.toLowerCase().includes(search.toLowerCase()));
+  return(
+    <div className="page">
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}><div className="ptitle">Clients</div><button className="btn btnP" onClick={onAdd}>+ Add Client</button></div>
+      <div className="psub">{clients.length} clients · {clients.filter(c=>c.status==='Active').length} active</div>
+      <input className="fi" style={{marginBottom:16}} placeholder="Search clients..." value={search} onChange={e=>setSearch(e.target.value)}/>
+      <div className="card">
+        {f.map(c=><div key={c.id} className="cr" onClick={()=>nav('client',c.id)}>
+          <div className="av" style={{background:c.col}}>{c.ini}</div>
+          <div style={{flex:1,minWidth:0}}><div style={{fontWeight:500,fontSize:13}}>{c.name}</div><div style={{fontSize:11,color:'var(--t3)',marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.goal} · {c.freq}</div></div>
+          <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:3}}><span className={`tag ${c.status==='Active'?'tg':'ta'}`}>{c.status}</span><div style={{fontSize:10,color:'var(--t3)'}}>{c.next}</div></div>
+        </div>)}
+        {f.length===0&&<div style={{padding:'20px 0',textAlign:'center',color:'var(--t3)'}}>No clients found</div>}
+      </div>
+    </div>
+  );
+}
+
+function ClientDetail({client,sessions,onBack,onLog}){
+  const [tab,setTab]=useState('overview');
+  const [showAI,setShowAI]=useState(false);
+  const cs=sessions.filter(s=>s.cid===client.id);
+  const last=cs[0];
+  const tabs=['overview','sessions','progress','next session'];
+  return(
+    <div className="page">
+      <button className="btn btnG" style={{marginBottom:12,fontSize:12,color:'var(--t3)'}} onClick={onBack}>← Back</button>
+      <div className="card" style={{marginBottom:16}}>
+        <div style={{display:'flex',alignItems:'flex-start',gap:14,marginBottom:14}}>
+          <div className="av avlg" style={{background:client.col}}>{client.ini}</div>
+          <div style={{flex:1}}>
+            <div style={{fontFamily:"'DM Serif Display',serif",fontSize:20,letterSpacing:'-.3px'}}>{client.name}</div>
+            <div style={{fontSize:12,color:'var(--t3)',marginTop:2}}>{client.email} · {client.contact}</div>
+            <div style={{display:'flex',gap:6,marginTop:7,flexWrap:'wrap'}}>
+              <span className={`tag ${client.status==='Active'?'tg':'ta'}`}>{client.status}</span>
+              <span className="tag tgr">{client.freq}</span>
+              <span className="tag tgr">Since {client.start}</span>
+            </div>
+          </div>
+          <button className="btn btnAI" onClick={()=>setShowAI(!showAI)}>✦ AI</button>
+        </div>
+        <div style={{display:'flex',gap:6,background:'var(--s2)',borderRadius:9,padding:3}}>
+          {tabs.map(t=><button key={t} onClick={()=>setTab(t)} style={{flex:1,padding:'6px 3px',border:'none',borderRadius:7,cursor:'pointer',background:tab===t?'white':'transparent',color:tab===t?'var(--text)':'var(--t3)',fontFamily:"'DM Sans',sans-serif",fontSize:11,fontWeight:tab===t?500:400,boxShadow:tab===t?'0 1px 3px rgba(0,0,0,.08)':'none',transition:'all .15s',textTransform:'capitalize'}}>{t}</button>)}
+        </div>
+      </div>
+      {showAI&&<div style={{marginBottom:14}}><AIPanel client={client} session={last} onClose={()=>setShowAI(false)}/></div>}
+      {tab==='overview'&&<div className="g2">
+        <div className="csm"><div className="stitle" style={{marginBottom:8}}>Goal</div><p style={{fontSize:13,lineHeight:1.6}}>{client.goal}</p></div>
+        <div className="csm"><div className="stitle" style={{marginBottom:8}}>Injuries</div><p style={{fontSize:13,lineHeight:1.6,color:client.injuries&&client.injuries!=='None'?'var(--text)':'var(--t3)'}}>{client.injuries||'None'}</p></div>
+        <div className="csm" style={{gridColumn:'1/-1'}}><div className="stitle" style={{marginBottom:8}}>Coach Notes</div><p style={{fontSize:13,lineHeight:1.6}}>{client.notes}</p></div>
+        {last&&<div className="csm" style={{gridColumn:'1/-1',borderLeft:'3px solid var(--accent)'}}><div className="stitle" style={{marginBottom:6}}>Last Session · {last.date}</div><p style={{fontSize:13,color:'var(--t2)',lineHeight:1.6}}>{last.notes}</p>{last.next&&<div style={{marginTop:9,padding:'7px 10px',background:'var(--alight)',borderRadius:7}}><div style={{fontSize:10,fontWeight:600,color:'var(--accent)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:2}}>Next Session</div><div style={{fontSize:13}}>{last.next}</div></div>}</div>}
+      </div>}
+      {tab==='sessions'&&<div>
+        <div style={{display:'flex',justifyContent:'flex-end',marginBottom:12}}><button className="btn btnP" onClick={onLog}>+ Log Session</button></div>
+        {cs.map(s=><div key={s.id} className="card" style={{marginBottom:10}}>
+          <div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}><div><div style={{fontWeight:600,fontSize:13}}>{s.type}</div><div style={{fontSize:11,color:'var(--t3)',marginTop:1}}>{s.date}</div></div><span className="tag tg" style={{fontSize:10}}>Done</span></div>
+          <div style={{fontSize:12,color:'var(--t2)',marginBottom:7,lineHeight:1.6}}>{s.exs}</div>
+          <hr style={{border:'none',borderTop:'1px solid var(--border)',margin:'8px 0'}}/>
+          <div style={{fontSize:12,fontStyle:'italic',color:'var(--t2)'}}>{s.notes}</div>
+          {s.next&&<div style={{marginTop:8,display:'flex',gap:7,padding:'7px 9px',background:'var(--alight)',borderRadius:7}}><span style={{fontSize:12,color:'var(--accent)',fontWeight:600}}>→</span><span style={{fontSize:12}}>{s.next}</span></div>}
+        </div>)}
+        {cs.length===0&&<div style={{textAlign:'center',color:'var(--t3)',padding:'40px 0'}}>No sessions yet</div>}
+      </div>}
+      {tab==='progress'&&<div>
+        <div className="card" style={{marginBottom:14}}>
+          <div className="shd"><div className="stitle">Volume Trend</div></div>
+          <div className="sbar" style={{marginBottom:10}}>{[40,55,50,65,70,68,80,75,85,88,82,92].map((v,i)=><div key={i} className="sb" style={{height:`${v}%`}}/>)}</div>
+          <div style={{fontSize:11,color:'var(--t3)'}}>↑ 23% training volume over last 12 sessions</div>
+        </div>
+        {[{t:'Hip Thrust PR: 80kg',d:'Apr 14, 2025',n:'New personal record. 10kg increase from 4 weeks ago.'},{t:'Squat depth milestone',d:'Apr 7, 2025',n:'Consistent parallel depth. Knee tracking resolved.'},{t:'Started training',d:client.start,n:`Initial assessment. Goal: ${client.goal}.`}].map((item,i)=>(
+          <div key={i} className="tli"><div className="tldot"><div style={{width:7,height:7,borderRadius:'50%',background:'var(--accent)'}}/></div><div style={{flex:1}}><div style={{fontWeight:500,fontSize:13}}>{item.t}</div><div style={{fontSize:11,color:'var(--t3)',marginBottom:3}}>{item.d}</div><div style={{fontSize:12,color:'var(--t2)'}}>{item.n}</div></div></div>
+        ))}
+      </div>}
+      {tab==='next session'&&<div>
+        <div className="card" style={{marginBottom:14}}>
+          <div className="shd"><div className="stitle">Next Session Notes</div></div>
+          {last?.next?<div style={{padding:12,background:'var(--alight)',borderRadius:9,borderLeft:'3px solid var(--accent)',fontSize:13,lineHeight:1.7}}>{last.next}</div>:<div style={{color:'var(--t3)',fontSize:13}}>Log a session to add next-session notes.</div>}
+        </div>
+        <div className="card">
+          <div className="shd"><div className="stitle">AI-Suggested Focus</div><button className="btn btnAI" style={{fontSize:10,padding:'4px 10px'}} onClick={()=>setShowAI(true)}>✦ Generate</button></div>
+          <div style={{fontSize:12,color:'var(--t3)'}}>Click generate for AI suggestions based on recent sessions.</div>
+        </div>
+      </div>}
+    </div>
+  );
+}
+
+function SessionLog({client,onBack,onSave}){
+  const [f,setF]=useState({date:new Date().toISOString().split('T')[0],type:'',exs:'',notes:'',cond:'',prog:'',next:''});
+  const [showAI,setShowAI]=useState(false);
+  const upd=(k,v)=>setF(x=>({...x,[k]:v}));
+  return(
+    <div className="page">
+      <button className="btn btnG" style={{marginBottom:12,fontSize:12,color:'var(--t3)'}} onClick={onBack}>← Back</button>
+      <div className="ptitle">Log Session</div>
+      <div className="psub">{client.name} · {f.date}</div>
+      <div className="card" style={{marginBottom:14}}>
+        <div className="g2"><div className="fg"><label className="fl">Date</label><input type="date" className="fi" value={f.date} onChange={e=>upd('date',e.target.value)}/></div>
+        <div className="fg"><label className="fl">Session Type</label><select className="fi fsel" value={f.type} onChange={e=>upd('type',e.target.value)}><option value="">Select...</option>{['Lower Body / Glutes','Lower Body / Strength','Upper Body / Push','Upper Body / Pull','Upper Body / Push-Pull','Full Body','Full Body Foundation','Back & Posterior Chain','Conditioning','Mobility & Recovery'].map(o=><option key={o}>{o}</option>)}</select></div></div>
+        <div className="fg"><label className="fl">Exercises Completed</label><textarea className="fi fta" placeholder="e.g. Hip thrusts 3×12 @ 80kg..." value={f.exs} onChange={e=>upd('exs',e.target.value)}/></div>
+        <div className="fg"><label className="fl">Client Condition</label><input className="fi" placeholder="Energy, fatigue, mood..." value={f.cond} onChange={e=>upd('cond',e.target.value)}/></div>
+        <div className="fg"><label className="fl">Trainer Notes</label><textarea className="fi fta" placeholder="What went well, form notes..." value={f.notes} onChange={e=>upd('notes',e.target.value)}/></div>
+        <div className="fg"><label className="fl">Progress Observations</label><textarea className="fi fta" style={{minHeight:55}} placeholder="How is this client progressing..." value={f.prog} onChange={e=>upd('prog',e.target.value)}/></div>
+        <div className="fg" style={{marginBottom:0}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}><label className="fl" style={{marginBottom:0}}>Next Session Notes</label><button className="btn btnAI" style={{fontSize:10,padding:'4px 9px'}} onClick={()=>setShowAI(!showAI)}>✦ AI Suggest</button></div>
+          <textarea className="fi fta" style={{minHeight:55}} placeholder="What to adjust next time..." value={f.next} onChange={e=>upd('next',e.target.value)}/>
+        </div>
+      </div>
+      {showAI&&<div style={{marginBottom:14}}><AIPanel client={client} session={f.exs?{date:f.date,type:f.type||'training',exs:f.exs,notes:f.notes}:null} onClose={()=>setShowAI(false)}/></div>}
+      <div style={{display:'flex',gap:9,justifyContent:'flex-end'}}><button className="btn btnS" onClick={onBack}>Cancel</button><button className="btn btnP" onClick={()=>onSave(f)}>Save Session</button></div>
+    </div>
+  );
+}
+
+function Schedule({slots}){
+  const days=['Mon','Tue','Wed','Thu','Fri'];
+  const times=['7:00 AM','8:00 AM','9:00 AM','10:00 AM','11:00 AM','6:30 PM'];
+  return(
+    <div className="page">
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}><div className="ptitle">Schedule</div><button className="btn btnP">+ Add Slot</button></div>
+      <div className="psub">Week of Apr 14–18, 2025</div>
+      <div style={{overflowX:'auto',marginBottom:16}}>
+        <div className="sgrid" style={{minWidth:500}}>
+          <div className="shdr"/>
+          {days.map(d=><div key={d} className="shdr">{d}</div>)}
+          {times.map(time=><React.Fragment key={time}>
+            <div className="stime">{time}</div>
+            {days.map(day=>{const sl=slots.find(s=>s.day===day&&s.time===time);return(<div key={day} className="scell">{sl?.booked?<div className="sev"><div>{sl.client}</div></div>:sl?<div className="savail">Open</div>:null}</div>);})}
+          </React.Fragment>)}
+        </div>
+      </div>
+      <div className="card">
+        <div className="shd"><div className="stitle">Booked Sessions</div></div>
+        {slots.filter(s=>s.booked).map(s=><div key={s.id} className="si"><div style={{minWidth:55}}><div style={{fontSize:12,fontWeight:500}}>{s.day}</div><div style={{fontSize:11,color:'var(--t3)'}}>{s.time}</div></div><div style={{flex:1,fontWeight:500,fontSize:13}}>{s.client}</div><div style={{display:'flex',gap:5}}><button className="btn btnG" style={{fontSize:11,padding:'3px 8px'}}>Edit</button><button className="btn btnG" style={{fontSize:11,padding:'3px 8px',color:'var(--red)'}}>Cancel</button></div></div>)}
+      </div>
+    </div>
+  );
+}
+
+function Booking(){
+  const [step,setStep]=useState(1);
+  const [selDate,setSelDate]=useState(null);
+  const [selTime,setSelTime]=useState(null);
+  const [name,setName]=useState('');
+  const [email,setEmail]=useState('');
+  const [done,setDone]=useState(false);
+  const dates=[{l:'Mon Apr 21',slots:['7:00 AM','9:00 AM','11:00 AM']},{l:'Tue Apr 22',slots:['8:00 AM','6:30 PM']},{l:'Wed Apr 23',slots:['10:00 AM','11:00 AM']},{l:'Thu Apr 24',slots:['7:00 AM','9:00 AM']},{l:'Fri Apr 25',slots:['8:00 AM','6:30 PM']}];
+  if(done)return(<div style={{padding:'40px 20px',textAlign:'center'}}><div style={{fontSize:40,marginBottom:14}}>✓</div><div style={{fontFamily:"'DM Serif Display',serif",fontSize:20,marginBottom:8}}>Booking confirmed!</div><div style={{color:'var(--t2)',fontSize:13}}>{selDate} at {selTime}</div><div style={{color:'var(--t3)',fontSize:12,marginTop:4}}>Confirmation sent to {email}</div><button className="btn btnP" style={{marginTop:20}} onClick={()=>{setDone(false);setStep(1);setSelDate(null);setSelTime(null);}}>Book another</button></div>);
+  return(
+    <div className="page">
+      <div className="ptitle">Book a Session</div>
+      <div className="psub">with Alex Rivera · Personal Training</div>
+      <div style={{display:'flex',gap:6,marginBottom:20,alignItems:'center'}}>
+        {['Date & Time','Your Details','Confirm'].map((l,i)=><React.Fragment key={i}><div style={{display:'flex',alignItems:'center',gap:5}}><div style={{width:20,height:20,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:600,background:step>=i+1?'var(--accent)':'var(--s2)',color:step>=i+1?'white':'var(--t3)'}}>{i+1}</div><div style={{fontSize:11,color:step===i+1?'var(--text)':'var(--t3)',fontWeight:step===i+1?500:400}}>{l}</div></div>{i<2&&<div style={{width:16,height:1,background:'var(--borderS)'}}/>}</React.Fragment>)}
+      </div>
+      {step===1&&<div className="fi2">
+        {dates.map(d=><div key={d.l} className="card" style={{marginBottom:10,borderColor:selDate===d.l?'var(--accent)':'var(--border)',cursor:'pointer'}} onClick={()=>setSelDate(d.l)}>
+          <div style={{fontWeight:500,marginBottom:9,fontSize:13}}>{d.l}</div>
+          <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{d.slots.map(t=><button key={t} onClick={e=>{e.stopPropagation();setSelDate(d.l);setSelTime(t);}} className={`tslot ${selTime===t&&selDate===d.l?'sel':''}`} style={{flex:'none',padding:'7px 14px'}}>{t}</button>)}</div>
+        </div>)}
+        <div style={{display:'flex',justifyContent:'flex-end',marginTop:12}}><button className="btn btnP" disabled={!selTime} onClick={()=>setStep(2)}>Next →</button></div>
+      </div>}
+      {step===2&&<div className="fi2 card">
+        <div style={{marginBottom:14,padding:'9px 12px',background:'var(--alight)',borderRadius:7,fontSize:13}}><strong>{selDate}</strong> at <strong>{selTime}</strong></div>
+        <div className="fg"><label className="fl">Full Name</label><input className="fi" placeholder="Your name" value={name} onChange={e=>setName(e.target.value)}/></div>
+        <div className="fg"><label className="fl">Email</label><input className="fi" type="email" placeholder="you@email.com" value={email} onChange={e=>setEmail(e.target.value)}/></div>
+        <div style={{display:'flex',gap:9,justifyContent:'space-between',marginTop:8}}><button className="btn btnS" onClick={()=>setStep(1)}>← Back</button><button className="btn btnP" disabled={!name||!email} onClick={()=>setStep(3)}>Review →</button></div>
+      </div>}
+      {step===3&&<div className="fi2 card">
+        <div style={{fontFamily:"'DM Serif Display',serif",fontSize:18,marginBottom:14}}>Confirm your booking</div>
+        {[['Date',selDate],['Time',selTime],['Name',name],['Email',email],['Duration','60 minutes'],['Location','Studio – 123 Market St, SF']].map(([k,v])=><div key={k} style={{display:'flex',justifyContent:'space-between',padding:'7px 0',borderBottom:'1px solid var(--border)',fontSize:13}}><span style={{color:'var(--t3)'}}>{k}</span><span style={{fontWeight:500}}>{v}</span></div>)}
+        <div style={{display:'flex',gap:9,justifyContent:'space-between',marginTop:18}}><button className="btn btnS" onClick={()=>setStep(2)}>← Back</button><button className="btn btnP" onClick={()=>setDone(true)}>Confirm Booking</button></div>
+      </div>}
+    </div>
+  );
+}
+
+function AddModal({onClose,onSave}){
+  const [f,setF]=useState({name:'',email:'',contact:'',goal:'',freq:'3x/week',injuries:'',notes:''});
+  const upd=(k,v)=>setF(x=>({...x,[k]:v}));
+  return(
+    <div className="mback" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal">
+        <div style={{fontFamily:"'DM Serif Display',serif",fontSize:20,marginBottom:4}}>New Client</div>
+        <div style={{fontSize:12,color:'var(--t3)',marginBottom:18}}>Add a client to your roster</div>
+        <div className="g2"><div className="fg"><label className="fl">Full Name *</label><input className="fi" placeholder="Name" value={f.name} onChange={e=>upd('name',e.target.value)}/></div>
+        <div className="fg"><label className="fl">Email</label><input className="fi" type="email" placeholder="email" value={f.email} onChange={e=>upd('email',e.target.value)}/></div>
+        <div className="fg"><label className="fl">Phone</label><input className="fi" placeholder="+1 ..." value={f.contact} onChange={e=>upd('contact',e.target.value)}/></div>
+        <div className="fg"><label className="fl">Frequency</label><select className="fi fsel" value={f.freq} onChange={e=>upd('freq',e.target.value)}>{['1x/week','2x/week','3x/week','4x/week','5x/week'].map(o=><option key={o}>{o}</option>)}</select></div></div>
+        <div className="fg"><label className="fl">Training Goal</label><input className="fi" placeholder="e.g. Build lean muscle..." value={f.goal} onChange={e=>upd('goal',e.target.value)}/></div>
+        <div className="fg"><label className="fl">Injuries / Limits</label><input className="fi" placeholder="Any limitations..." value={f.injuries} onChange={e=>upd('injuries',e.target.value)}/></div>
+        <div className="fg"><label className="fl">Notes</label><textarea className="fi fta" style={{minHeight:55}} placeholder="Preferences, anything else..." value={f.notes} onChange={e=>upd('notes',e.target.value)}/></div>
+        <div style={{display:'flex',gap:9,justifyContent:'flex-end'}}><button className="btn btnS" onClick={onClose}>Cancel</button><button className="btn btnP" disabled={!f.name} onClick={()=>onSave(f)}>Add Client</button></div>
+      </div>
+    </div>
+  );
+}
+
+function App(){
+  const [view,setView]=useState('dashboard');
+  const [cid,setCid]=useState(null);
+  const [clients,setClients]=useState(MC);
+  const [sessions,setSessions]=useState(MS);
+  const [showAdd,setShowAdd]=useState(false);
+  const [logging,setLogging]=useState(false);
+  const client=clients.find(c=>c.id===cid);
+  const nav=(p,id=null)=>{setView(p);if(id)setCid(id);setLogging(false);};
+  const addClient=f=>{
+    const cols=['#2D6A4F','#1D4ED8','#7C3AED','#B45309','#991B1B','#0F766E'];
+    const nc={...f,id:Date.now(),ini:f.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2),col:cols[clients.length%cols.length],start:new Date().toISOString().split('T')[0],status:'Active',next:'Not scheduled'};
+    setClients(c=>[...c,nc]);setShowAdd(false);setCid(nc.id);setView('client');
+  };
+  const saveSession=f=>{setSessions(s=>[{...f,id:Date.now(),cid},...s]);setLogging(false);setView('client');};
+  const navItems=[{id:'dashboard',l:'Dashboard',ic:'⊞'},{id:'clients',l:'Clients',ic:'◉'},{id:'schedule',l:'Schedule',ic:'⊟'},{id:'booking',l:'Booking',ic:'⊕'}];
+
+  let content;
+  if(logging&&client)content=<SessionLog client={client} onBack={()=>setLogging(false)} onSave={saveSession}/>;
+  else switch(view){
+    case 'dashboard':content=<Dashboard clients={clients} sessions={sessions} nav={nav}/>;break;
+    case 'clients':content=<ClientsList clients={clients} nav={nav} onAdd={()=>setShowAdd(true)}/>;break;
+    case 'client':content=client?<ClientDetail client={client} sessions={sessions} onBack={()=>setView('clients')} onLog={()=>setLogging(true)}/>:null;break;
+    case 'schedule':content=<Schedule slots={SLOTS}/>;break;
+    case 'booking':content=<Booking/>;break;
+    default:content=<Dashboard clients={clients} sessions={sessions} nav={nav}/>;
+  }
+
+  return(
+    <div className="app">
+      <div className="sidebar">
+        <div className="slogo"><div className="lmark">CoachOS</div><div className="lsub">Training Platform</div></div>
+        <nav className="snav">
+          {navItems.map(it=><button key={it.id} className={`ni ${view===it.id||(view==='client'&&it.id==='clients')?'active':''}`} onClick={()=>nav(it.id)}><span style={{fontSize:14,width:16,textAlign:'center'}}>{it.ic}</span>{it.l}</button>)}
+        </nav>
+        <div className="sfoot"><div className="cbadge"><div className="cav">AR</div><div><div style={{fontSize:12,fontWeight:500}}>Alex Rivera</div><div style={{fontSize:10,color:'var(--t3)'}}>Personal Trainer</div></div></div></div>
+      </div>
+      <main className="main">{content}</main>
+      {showAdd&&<AddModal onClose={()=>setShowAdd(false)} onSave={addClient}/>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
