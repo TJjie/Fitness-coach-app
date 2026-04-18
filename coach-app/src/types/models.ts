@@ -11,6 +11,8 @@ export interface Client {
   injuries: string;
   startDate: string;
   status: ClientStatus;
+  /** From Supabase `created_at` when loaded from the database */
+  createdAt?: string;
 }
 
 export interface SessionLog {
@@ -31,6 +33,8 @@ export interface WeeklyAvailability {
   id: string;
   dayOfWeek: number;
   time: string;
+  /** From Supabase `display_label` when loaded from the database */
+  displayLabel?: string;
 }
 
 export type BookingSource = 'coach' | 'public';
@@ -44,6 +48,8 @@ export interface Booking {
   time: string;
   status: 'confirmed' | 'cancelled';
   source: BookingSource;
+  /** Set when row comes from `bookings.availability_slot_id` (public web booking). */
+  availabilitySlotId?: string;
 }
 
 export interface AppState {

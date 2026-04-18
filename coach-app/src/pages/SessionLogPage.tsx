@@ -3,6 +3,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { SESSION_TYPES } from '../constants/sessionTypes';
 import { useCoachData } from '../context/CoachDataContext';
 import { formatDisplayDate } from '../lib/dates';
+import { insertSessionToSupabase } from '../lib/insertSessionToSupabase';
+import { supabase } from '../lib/supabaseClient';
 
 const empty = {
   date: new Date().toISOString().slice(0, 10),
@@ -29,6 +31,9 @@ export function SessionLogPage() {
 
   const isEdit = Boolean(sessionId);
   const [f, setF] = useState(empty);
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const exercisesRef = useRef<HTMLTextAreaElement>(null);
   const hydratedKey = useRef<string | null>(null);
 
@@ -94,15 +99,60 @@ export function SessionLogPage() {
 
   const upd = (k: keyof typeof f, v: string) => setF((x) => ({ ...x, [k]: v }));
 
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!f.sessionType.trim() || !f.exercises.trim()) return;
+    setFormError(null);
+    setSuccessMsg(null);
+
     if (isEdit && sessionId) {
       updateSession(sessionId, f);
-    } else {
-      addSession({ ...f, clientId });
+      navigate(`/clients/${clientId}`);
+      return;
     }
-    navigate(`/clients/${clientId}`);
+
+    if (!clientId) return;
+
+    if (!supabase) {
+      addSession({ ...f, clientId });
+      navigate(`/clients/${clientId}`);
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const { id, createdAt } = await insertSessionToSupabase({
+        clientId,
+        date: f.date,
+        sessionType: f.sessionType,
+        exercises: f.exercises,
+        trainerNotes: f.trainerNotes,
+        clientCondition: f.clientCondition,
+        progressObservations: f.progressObservations,
+        nextSessionNotes: f.nextSessionNotes,
+      });
+      addSession({
+        ...f,
+        clientId,
+        id,
+        createdAt,
+      });
+      setSuccessMsg('Session saved.');
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, 900);
+      });
+      navigate(`/clients/${clientId}`);
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'object' && err !== null && 'message' in err
+            ? String((err as { message: unknown }).message)
+            : 'Could not save session.';
+      setFormError(msg);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -124,6 +174,16 @@ export function SessionLogPage() {
       ) : null}
 
       <form onSubmit={onSubmit} className="card">
+        {successMsg ? (
+          <p role="status" style={{ margin: '0 0 12px', fontSize: 14, color: 'var(--text-secondary)' }}>
+            {successMsg}
+          </p>
+        ) : null}
+        {formError ? (
+          <p role="alert" style={{ margin: '0 0 12px', fontSize: 14, color: 'var(--danger)' }}>
+            {formError}
+          </p>
+        ) : null}
         <p className="form-section-label" style={{ marginTop: 0 }}>
           This session
         </p>
@@ -239,8 +299,12 @@ export function SessionLogPage() {
           <Link to={`/clients/${clientId}`} className="btn btn-secondary">
             Cancel
           </Link>
-          <button type="submit" className="btn btn-primary" disabled={!f.sessionType.trim()}>
-            {isEdit ? 'Save session' : 'Save log'}
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={submitting || !f.sessionType.trim() || !f.exercises.trim()}
+          >
+            {isEdit ? 'Save session' : submitting ? 'Saving…' : 'Save log'}
           </button>
         </div>
       </form>

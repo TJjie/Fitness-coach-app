@@ -156,6 +156,23 @@
   background: var(--surface);
 }
 
+.cardPlanProminent {
+  border-width: 2px;
+  border-color: rgba(47, 93, 79, 0.35);
+  box-shadow: 0 4px 20px rgba(47, 93, 79, 0.12);
+  padding: 20px 18px 18px;
+}
+
+.planBodyLead {
+  margin: 0 0 14px;
+  font-size: 17px;
+  line-height: 1.55;
+  font-weight: 500;
+  color: var(--text);
+  white-space: pre-wrap;
+  flex: 1;
+}
+
 .eyebrow {
   display: block;
   font-size: 10px;
@@ -178,6 +195,39 @@
   line-height: 1.4;
 }
 
+.sessionHeadline {
+  margin: 0 0 14px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+
+.sessionHeadlineDate {
+  color: var(--text);
+}
+
+.sessionHeadlineSep {
+  margin: 0 0.35em;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.sessionHeadlineType {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.sessionFieldLabel {
+  margin: 0 0 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
 .sessionBody {
   margin: 0 0 12px;
   font-size: 14px;
@@ -187,6 +237,92 @@
   -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.sessionBodyPrimary {
+  font-size: 15px;
+  color: var(--text);
+  -webkit-line-clamp: 8;
+}
+
+.sessionCallout {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: var(--cd-radius-sm);
+  background: rgba(26, 25, 22, 0.04);
+  border: 1px solid var(--border);
+}
+
+.sessionCalloutLabel {
+  margin: 0 0 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.sessionCalloutBody {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.sessionNextPreview {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: var(--cd-radius-sm);
+  border-left: 3px solid var(--accent);
+  background: rgba(47, 93, 79, 0.06);
+}
+
+.sessionNextPreviewLabel {
+  margin: 0 0 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.sessionNextPreviewBody {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.sessionMore {
+  margin: 0 0 12px;
+  border-radius: var(--cd-radius-sm);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.sessionMoreSummary {
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  list-style: none;
+}
+
+.sessionMoreSummary::-webkit-details-marker {
+  display: none;
+}
+
+.sessionMoreInner {
+  padding: 0 12px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.sessionMoreInner .sessionNotes {
+  -webkit-line-clamp: unset;
+  display: block;
+  overflow: visible;
+  margin-top: 10px;
 }
 
 .sessionMeta {
@@ -263,9 +399,10 @@
   margin-top: auto;
 }
 
-/* Roster / danger zone */
+/* Roster / danger zone — after coaching tabs */
 .roster {
-  margin-bottom: var(--cd-gap-lg);
+  margin-top: var(--cd-gap-lg);
+  margin-bottom: 0;
   padding: 16px 18px;
   border-radius: var(--cd-radius);
   border: 1px solid rgba(26, 25, 22, 0.08);
@@ -419,6 +556,57 @@
   border-radius: var(--cd-radius-sm);
   margin: 6px 4px 10px;
   border-bottom: none;
+}
+
+.historyRowOlder {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.historyDetails {
+  margin-top: 8px;
+  border-radius: var(--cd-radius-sm);
+  border: 1px solid rgba(26, 25, 22, 0.08);
+  background: rgba(26, 25, 22, 0.02);
+}
+
+.historyDetailsSummary {
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  list-style: none;
+}
+
+.historyDetailsSummary::-webkit-details-marker {
+  display: none;
+}
+
+.historyDetailsBody {
+  padding: 0 10px 10px;
+  border-top: 1px solid rgba(26, 25, 22, 0.06);
+}
+
+.historyDetailLine {
+  margin: 10px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.historyDetailLine:first-child {
+  margin-top: 8px;
+}
+
+.historyDetailLine strong {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 4px;
 }
 
 .historyDate {

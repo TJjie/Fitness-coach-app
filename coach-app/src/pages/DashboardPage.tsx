@@ -22,7 +22,7 @@ function colorFor(id: string) {
 }
 
 export function DashboardPage() {
-  const { state, clients } = useCoachData();
+  const { state, clients, clientsLoading } = useCoachData();
   const activeClients = useMemo(() => clients.filter((c) => c.status !== 'paused'), [clients]);
   const today = toISODate(new Date());
 
@@ -45,8 +45,14 @@ export function DashboardPage() {
     <>
       <h1 className="page-title">Today</h1>
       <p className="page-sub">
-        {formatDisplayDate(today)} · {activeClients.length} active
-        {clients.length !== activeClients.length ? ` · ${clients.length - activeClients.length} archived` : ''}
+        {formatDisplayDate(today)}
+        {clientsLoading
+          ? ' · Loading clients…'
+          : ` · ${activeClients.length} active${
+              clients.length !== activeClients.length
+                ? ` · ${clients.length - activeClients.length} archived`
+                : ''
+            }`}
       </p>
 
       <div className="row-between" style={{ marginBottom: 12 }}>
@@ -70,7 +76,7 @@ export function DashboardPage() {
         </Link>
       </div>
 
-      {followUps.length > 0 && (
+      {!clientsLoading && followUps.length > 0 && (
         <div className="card" style={{ marginBottom: 16, borderLeft: '3px solid var(--warn)', background: 'var(--warn-soft)' }}>
           <h2 className="card-title" style={{ color: 'var(--warn)' }}>
             Follow-up
@@ -148,7 +154,11 @@ export function DashboardPage() {
             View all →
           </Link>
         </div>
-        {activeClients.length === 0 ? (
+        {clientsLoading ? (
+          <p className="empty" style={{ padding: '16px 0' }}>
+            Loading clients…
+          </p>
+        ) : activeClients.length === 0 ? (
           <p className="empty" style={{ padding: '16px 0' }}>
             {clients.length > 0
               ? 'No active clients — open Clients to restore someone from Archived.'

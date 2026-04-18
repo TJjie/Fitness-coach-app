@@ -1,8 +1,13 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useCoachData } from '../context/CoachDataContext';
+import {
+  deleteAvailabilitySlotFromSupabase,
+  insertAvailabilitySlotToSupabase,
+} from '../lib/availabilitySlotsSupabase';
 import { formatDisplayDate, parseISODate, toISODate } from '../lib/dates';
 import { weekdayShort } from '../lib/bookingSlots';
+import { supabase } from '../lib/supabaseClient';
 import type { Booking, Client, WeeklyAvailability } from '../types/models';
 
 const DAYS = [
@@ -30,13 +35,39 @@ function slotTaken(
   );
 }
 
+function slotById(slots: WeeklyAvailability[], slotId: string | undefined): WeeklyAvailability | undefined {
+  if (!slotId) return undefined;
+  return slots.find((s) => s.id === slotId);
+}
+
+function slotTemplateLabel(slot: WeeklyAvailability | undefined): string {
+  if (!slot) return '—';
+  return slot.displayLabel ?? `${weekdayShort(slot.dayOfWeek)} · ${slot.time}`;
+}
+
 export function SchedulePage() {
-  const { state, clients, addAvailability, removeAvailability, addBooking, updateBooking, cancelBooking } =
-    useCoachData();
+  const {
+    state,
+    clients,
+    addAvailability,
+    removeAvailability,
+    addBooking,
+    updateBooking,
+    cancelBooking,
+    availabilityLoading,
+    availabilityFetchError,
+    refreshAvailability,
+    bookingsLoading,
+    bookingsFetchError,
+    refreshBookings,
+  } = useCoachData();
   const [day, setDay] = useState(1);
   const [time, setTime] = useState('09:00');
   const [showBook, setShowBook] = useState(false);
   const [editBooking, setEditBooking] = useState<Booking | null>(null);
+  const [addingSlot, setAddingSlot] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [slotActionError, setSlotActionError] = useState<string | null>(null);
 
   const today = toISODate(new Date());
 
@@ -50,6 +81,16 @@ export function SchedulePage() {
         }),
     [state.bookings, today],
   );
+
+  const upcomingWebCountBySlotId = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const b of state.bookings) {
+      if (b.status !== 'confirmed' || b.date < today || !b.availabilitySlotId) continue;
+      const id = b.availabilitySlotId;
+      m.set(id, (m.get(id) ?? 0) + 1);
+    }
+    return m;
+  }, [state.bookings, today]);
 
   const bookLink = typeof window !== 'undefined' ? `${window.location.origin}/book` : '/book';
 
@@ -65,9 +106,51 @@ export function SchedulePage() {
     [clients],
   );
 
-  const onAddSlot = (e: React.FormEvent) => {
+  const onAddSlot = async (e: React.FormEvent) => {
     e.preventDefault();
-    addAvailability({ dayOfWeek: day, time });
+    setSlotActionError(null);
+    if (!supabase) {
+      addAvailability({ dayOfWeek: day, time });
+      return;
+    }
+    setAddingSlot(true);
+    try {
+      const id = await insertAvailabilitySlotToSupabase({ dayOfWeek: day, timeLabel: time });
+      addAvailability({ dayOfWeek: day, time, id });
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'object' && err !== null && 'message' in err
+            ? String((err as { message: unknown }).message)
+            : 'Could not add slot.';
+      setSlotActionError(msg);
+    } finally {
+      setAddingSlot(false);
+    }
+  };
+
+  const onRemoveSlot = async (slotId: string) => {
+    setSlotActionError(null);
+    if (!supabase) {
+      removeAvailability(slotId);
+      return;
+    }
+    setRemovingId(slotId);
+    try {
+      await deleteAvailabilitySlotFromSupabase(slotId);
+      removeAvailability(slotId);
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'object' && err !== null && 'message' in err
+            ? String((err as { message: unknown }).message)
+            : 'Could not remove slot.';
+      setSlotActionError(msg);
+    } finally {
+      setRemovingId(null);
+    }
   };
 
   return (
@@ -102,6 +185,21 @@ export function SchedulePage() {
         <p style={{ margin: '0 0 12px', fontSize: 14, color: 'var(--text-secondary)' }}>
           These recurring slots power what clients see as bookable times.
         </p>
+        {supabase && availabilityFetchError ? (
+          <div className="empty" style={{ padding: '8px 0 14px', textAlign: 'left' }}>
+            <p role="alert" style={{ margin: '0 0 10px', fontSize: 14, color: 'var(--danger)' }}>
+              {availabilityFetchError}
+            </p>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => void refreshAvailability()}>
+              Try again
+            </button>
+          </div>
+        ) : null}
+        {slotActionError ? (
+          <p role="alert" style={{ margin: '0 0 12px', fontSize: 14, color: 'var(--danger)' }}>
+            {slotActionError}
+          </p>
+        ) : null}
         <form onSubmit={onAddSlot} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 10, alignItems: 'end' }}>
           <div className="field" style={{ marginBottom: 0 }}>
             <label htmlFor="av-day">Day</label>
@@ -117,30 +215,63 @@ export function SchedulePage() {
             <label htmlFor="av-time">Time</label>
             <input id="av-time" type="time" className="input" value={time} onChange={(e) => setTime(e.target.value)} />
           </div>
-          <button type="submit" className="btn btn-primary">
-            Add
+          <button type="submit" className="btn btn-primary" disabled={addingSlot || Boolean(supabase && availabilityLoading)}>
+            {addingSlot ? 'Adding…' : 'Add'}
           </button>
         </form>
         <div className="divider" />
-        {sortedAvail.length === 0 ? (
+        {supabase && availabilityLoading && sortedAvail.length === 0 ? (
+          <p className="empty" style={{ padding: '8px 0' }} role="status">
+            Loading slots…
+          </p>
+        ) : sortedAvail.length === 0 ? (
           <p className="empty" style={{ padding: '8px 0' }}>
             No slots yet.
           </p>
         ) : (
           <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-            {sortedAvail.map((a) => (
-              <li key={a.id} className="row-between" style={{ padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-                <span>
-                  {weekdayShort(a.dayOfWeek)} · {a.time}
-                </span>
-                <button type="button" className="btn btn-danger-ghost btn-sm" onClick={() => removeAvailability(a.id)}>
-                  Remove
-                </button>
-              </li>
-            ))}
+            {sortedAvail.map((a) => {
+              const webUpcoming = upcomingWebCountBySlotId.get(a.id) ?? 0;
+              return (
+                <li key={a.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                  <div className="row-between" style={{ alignItems: 'flex-start' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 600 }}>{a.displayLabel ?? `${weekdayShort(a.dayOfWeek)} · ${a.time}`}</div>
+                      {webUpcoming > 0 ? (
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                          {webUpcoming} upcoming web booking{webUpcoming === 1 ? '' : 's'} · see list below
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Available on the booking page</div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-danger-ghost btn-sm"
+                      style={{ flexShrink: 0 }}
+                      disabled={removingId === a.id}
+                      onClick={() => void onRemoveSlot(a.id)}
+                    >
+                      {removingId === a.id ? 'Removing…' : 'Remove'}
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
+
+      {supabase && bookingsFetchError ? (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <p role="alert" style={{ margin: '0 0 10px', fontSize: 14, color: 'var(--danger)' }}>
+            {bookingsFetchError}
+          </p>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => void refreshBookings()}>
+            Try again
+          </button>
+        </div>
+      ) : null}
 
       <div className="row-between" style={{ marginBottom: 10 }}>
         <h2 className="card-title" style={{ margin: 0 }}>
@@ -152,27 +283,53 @@ export function SchedulePage() {
       </div>
 
       <div className="card">
-        {upcoming.length === 0 ? (
+        {supabase && bookingsLoading && upcoming.length === 0 ? (
+          <p className="empty" style={{ padding: '12px 0' }} role="status">
+            Loading bookings…
+          </p>
+        ) : upcoming.length === 0 ? (
           <p className="empty" style={{ padding: '12px 0' }}>No confirmed bookings ahead.</p>
         ) : (
-          upcoming.map((b) => (
-            <div key={b.id} className="list-row" style={{ cursor: 'default' }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600 }}>{b.clientName}</div>
-                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                  {formatDisplayDate(b.date)} · {b.time} · {b.source === 'public' ? 'Web booking' : 'Coach'}
+          upcoming.map((b) => {
+            const slot = slotById(state.availability, b.availabilitySlotId);
+            const slotLine = slotTemplateLabel(slot);
+            return (
+              <div key={b.id} className="list-row" style={{ cursor: 'default', alignItems: 'flex-start' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600 }}>{b.clientName}</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
+                    <strong style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>When:</strong>{' '}
+                    {formatDisplayDate(b.date)} · {b.time}
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
+                    <strong style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Slot:</strong> {slotLine}
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
+                    <strong style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Email:</strong>{' '}
+                    {b.clientEmail ?? '—'}
+                  </div>
+                  <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Source:</span>
+                    <span className="tag" style={{ fontSize: 11 }}>
+                      {b.source === 'public' ? 'Web' : 'Coach'}
+                    </span>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Status:</span>
+                    <span className={`tag ${b.status === 'confirmed' ? 'tag-active' : 'tag-paused'}`} style={{ fontSize: 11 }}>
+                      {b.status === 'confirmed' ? 'Confirmed' : b.status}
+                    </span>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditBooking(b)}>
+                    Edit
+                  </button>
+                  <button type="button" className="btn btn-danger-ghost btn-sm" onClick={() => cancelBooking(b.id)}>
+                    Cancel
+                  </button>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditBooking(b)}>
-                  Edit
-                </button>
-                <button type="button" className="btn btn-danger-ghost btn-sm" onClick={() => cancelBooking(b.id)}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 

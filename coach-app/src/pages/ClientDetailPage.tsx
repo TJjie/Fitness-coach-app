@@ -1,8 +1,10 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useCoachData } from '../context/CoachDataContext';
 import { clientStatusLabel } from '../lib/clientStatusLabel';
 import { formatDisplayDate } from '../lib/dates';
+import { fetchSessionsForClientFromSupabase } from '../lib/fetchSessionsForClientFromSupabase';
+import { supabase } from '../lib/supabaseClient';
 import styles from './ClientDetailPage.module.css';
 
 type Tab = 'overview' | 'history' | 'progress' | 'next';
@@ -16,8 +18,10 @@ function excerpt(text: string, max: number): string {
 export function ClientDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { clients, sessionsForClient, deleteClient, updateClient } = useCoachData();
-  const [tab, setTab] = useState<Tab>('overview');
+  const { clients, sessionsForClient, deleteClient, updateClient, replaceSessionsForClient } = useCoachData();
+  const [tab, setTab] = useState<Tab>('history');
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [sessionsFetchError, setSessionsFetchError] = useState<string | null>(null);
   const client = clients.find((c) => c.id === id);
   const sessions = useMemo(() => (id ? sessionsForClient(id) : []), [id, sessionsForClient]);
 
@@ -31,6 +35,44 @@ export function ClientDetailPage() {
       firstDate: sessions[sessions.length - 1].date,
     };
   }, [sessions]);
+
+  const loadSessions = useCallback(
+    async (signal?: AbortSignal) => {
+      if (!supabase || !id) return;
+      if (!clients.some((c) => c.id === id)) return;
+      setSessionsLoading(true);
+      setSessionsFetchError(null);
+      replaceSessionsForClient(id, []);
+      try {
+        const list = await fetchSessionsForClientFromSupabase(id);
+        if (signal?.aborted) return;
+        replaceSessionsForClient(id, list);
+      } catch (err) {
+        if (signal?.aborted) return;
+        const msg =
+          err instanceof Error
+            ? err.message
+            : typeof err === 'object' && err !== null && 'message' in err
+              ? String((err as { message: unknown }).message)
+              : 'Could not load sessions.';
+        setSessionsFetchError(msg);
+      } finally {
+        if (!signal?.aborted) setSessionsLoading(false);
+      }
+    },
+    [id, clients, replaceSessionsForClient],
+  );
+
+  useEffect(() => {
+    if (!supabase || !id || !clients.some((c) => c.id === id)) return undefined;
+    const ac = new AbortController();
+    void Promise.resolve().then(() => loadSessions(ac.signal));
+    return () => ac.abort();
+  }, [id, clients, loadSessions]);
+
+  useEffect(() => {
+    void Promise.resolve().then(() => setTab('history'));
+  }, [id]);
 
   if (!client) {
     return (
@@ -48,6 +90,15 @@ export function ClientDetailPage() {
         ← Clients
       </Link>
 
+      {supabase && sessionsFetchError ? (
+        <div className={styles.emptyState} style={{ marginBottom: 16 }}>
+          <p style={{ margin: '0 0 10px' }}>{sessionsFetchError}</p>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => void loadSessions()}>
+            Try again
+          </button>
+        </div>
+      ) : null}
+
       {client.status === 'paused' ? (
         <div className={styles.bannerArchived}>
           <span className={styles.bannerEyebrow}>Archived</span>
@@ -64,6 +115,12 @@ export function ClientDetailPage() {
             <span>{client.frequency}</span>
             <span className={styles.metaDot} aria-hidden />
             <span>Since {formatDisplayDate(client.startDate)}</span>
+            {latest ? (
+              <>
+                <span className={styles.metaDot} aria-hidden />
+                <span>Last session {formatDisplayDate(latest.date)}</span>
+              </>
+            ) : null}
           </div>
         </div>
         <div className={styles.actions}>
@@ -77,21 +134,54 @@ export function ClientDetailPage() {
       </header>
 
       <div className={styles.glanceGrid}>
-        {latest ? (
+        {supabase && sessionsLoading ? (
+          <section className={styles.cardEmptySessions} aria-live="polite">
+            <span className={styles.eyebrow}>Sessions</span>
+            <p className={styles.emptySessionsText}>Loading session history…</p>
+          </section>
+        ) : latest ? (
           <section className={styles.cardSession} aria-labelledby="last-session-heading">
             <div className={styles.cardSessionInner}>
               <span id="last-session-heading" className={styles.eyebrow}>
                 Last session
               </span>
-              <p className={styles.sessionKicker}>
-                {formatDisplayDate(latest.date)} · {latest.sessionType}
+              <p className={styles.sessionHeadline}>
+                <span className={styles.sessionHeadlineDate}>{formatDisplayDate(latest.date)}</span>
+                <span className={styles.sessionHeadlineSep} aria-hidden>
+                  ·
+                </span>
+                <span className={styles.sessionHeadlineType}>{latest.sessionType}</span>
               </p>
-              <p className={styles.sessionBody}>{latest.exercises || '—'}</p>
-              {latest.clientCondition ? <p className={styles.sessionMeta}>Readiness: {latest.clientCondition}</p> : null}
-              {latest.trainerNotes ? (
-                <p className={styles.sessionNotes}>
-                  <strong>Coach notes</strong> {latest.trainerNotes}
-                </p>
+              <p className={styles.sessionFieldLabel}>What you did</p>
+              <p className={`${styles.sessionBody} ${styles.sessionBodyPrimary}`}>{latest.exercises || '—'}</p>
+              {latest.clientCondition ? (
+                <div className={styles.sessionCallout}>
+                  <p className={styles.sessionCalloutLabel}>Readiness</p>
+                  <p className={styles.sessionCalloutBody}>{latest.clientCondition}</p>
+                </div>
+              ) : null}
+              {nextPlan ? (
+                <div className={styles.sessionNextPreview}>
+                  <p className={styles.sessionNextPreviewLabel}>Carried into next visit</p>
+                  <p className={styles.sessionNextPreviewBody}>{excerpt(nextPlan, 220)}</p>
+                </div>
+              ) : null}
+              {latest.trainerNotes || latest.progressObservations ? (
+                <details className={styles.sessionMore}>
+                  <summary className={styles.sessionMoreSummary}>More from this visit</summary>
+                  <div className={styles.sessionMoreInner}>
+                    {latest.trainerNotes ? (
+                      <p className={styles.sessionNotes}>
+                        <strong>Coach notes</strong> {latest.trainerNotes}
+                      </p>
+                    ) : null}
+                    {latest.progressObservations ? (
+                      <p className={styles.sessionMeta} style={{ marginBottom: 0 }}>
+                        <strong>Progress</strong> {latest.progressObservations}
+                      </p>
+                    ) : null}
+                  </div>
+                </details>
               ) : null}
               <div className={styles.rowActions}>
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => setTab('history')}>
@@ -114,14 +204,14 @@ export function ClientDetailPage() {
         )}
 
         <section
-          className={`${styles.cardPlan} ${nextPlan ? '' : styles.cardPlanEmpty}`}
+          className={`${styles.cardPlan} ${nextPlan ? styles.cardPlanProminent : styles.cardPlanEmpty}`}
           aria-labelledby="next-plan-heading"
         >
           <span id="next-plan-heading" className={`${styles.eyebrow} ${styles.eyebrowAccent}`}>
-            Plan for next visit
+            Next session — your plan
           </span>
           {nextPlan ? (
-            <p className={styles.planBody}>{latest?.nextSessionNotes}</p>
+            <p className={styles.planBodyLead}>{latest?.nextSessionNotes}</p>
           ) : (
             <p className={`${styles.planBody} ${styles.planBodyMuted}`}>
               Nothing here yet. When you log a session, use the <strong>Next session plan</strong> field so your priorities
@@ -134,56 +224,20 @@ export function ClientDetailPage() {
             </Link>
             {latest ? (
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => setTab('next')}>
-                Next tab
+                Expand plan
               </button>
             ) : null}
           </div>
         </section>
       </div>
 
-      <section className={styles.roster}>
-        <h2 className={styles.rosterTitle}>Roster &amp; data</h2>
-        <p className={styles.rosterCopy}>
-          <strong>Archive</strong> keeps their profile and logs but hides them from your main list and new manual bookings.{' '}
-          <strong>Delete</strong> removes the client, every session log, and coach-linked bookings — not reversible.
-        </p>
-        <div className={styles.rosterActions}>
-          {client.status !== 'paused' ? (
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => updateClient(client.id, { status: 'paused' })}>
-              Archive client
-            </button>
-          ) : (
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => updateClient(client.id, { status: 'active' })}>
-              Restore to active
-            </button>
-          )}
-          <button
-            type="button"
-            className="btn btn-danger-ghost btn-sm"
-            onClick={() => {
-              if (
-                !window.confirm(
-                  `Delete ${client.name} permanently? All session logs and coach-linked bookings for them will be removed. This cannot be undone.`,
-                )
-              ) {
-                return;
-              }
-              deleteClient(client.id);
-              navigate('/clients');
-            }}
-          >
-            Delete permanently
-          </button>
-        </div>
-      </section>
-
       <div className={styles.tabList} role="tablist" aria-label="Client sections">
         {(
           [
-            ['overview', 'Profile'],
             ['history', 'History'],
             ['progress', 'Progress'],
             ['next', 'Next'],
+            ['overview', 'Profile'],
           ] as const
         ).map(([key, label]) => (
           <button
@@ -234,35 +288,91 @@ export function ClientDetailPage() {
 
       {tab === 'history' && (
         <div>
-          {sessions.length === 0 ? (
+          {supabase && sessionsLoading ? (
+            <div className={styles.emptyState} aria-live="polite">
+              Loading sessions…
+            </div>
+          ) : sessions.length === 0 ? (
             <div className={styles.emptyState}>No sessions yet. Log the first workout.</div>
           ) : (
             <div className={styles.historyCard}>
-              {sessions.map((s, i) => (
-                <div key={s.id} className={`${styles.historyRow} ${i === 0 ? styles.historyRowLatest : ''}`}>
-                  <div className={styles.historyDate}>{formatDisplayDate(s.date)}</div>
-                  <div className={styles.historyMain}>
-                    {i === 0 ? (
-                      <span className={`tag tag-active ${styles.badgeLatest}`} style={{ fontSize: 10 }}>
-                        Latest
-                      </span>
-                    ) : null}
-                    <p className={styles.historyType}>{s.sessionType}</p>
-                    <p className={styles.historyExcerpt} style={{ WebkitLineClamp: i === 0 ? 3 : 2 }}>
-                      {s.exercises || '—'}
-                    </p>
-                    {s.trainerNotes ? (
-                      <p className={styles.historyNotes} style={{ WebkitLineClamp: 2 }}>
-                        Notes: {excerpt(s.trainerNotes, i === 0 ? 160 : 120)}
+              {sessions.map((s, i) => {
+                const hasSecondary =
+                  Boolean(s.clientCondition?.trim()) ||
+                  Boolean(s.trainerNotes?.trim()) ||
+                  Boolean(s.progressObservations?.trim()) ||
+                  Boolean(s.nextSessionNotes?.trim());
+                return (
+                  <div
+                    key={s.id}
+                    className={`${styles.historyRow} ${i === 0 ? styles.historyRowLatest : styles.historyRowOlder}`}
+                  >
+                    <div className={styles.historyDate}>{formatDisplayDate(s.date)}</div>
+                    <div className={styles.historyMain}>
+                      {i === 0 ? (
+                        <span className={`tag tag-active ${styles.badgeLatest}`} style={{ fontSize: 10 }}>
+                          Latest
+                        </span>
+                      ) : null}
+                      <p className={styles.historyType}>{s.sessionType}</p>
+                      <p className={styles.historyExcerpt} style={{ WebkitLineClamp: i === 0 ? 4 : 2 }}>
+                        {s.exercises || '—'}
                       </p>
-                    ) : null}
-                    {s.nextSessionNotes ? <p className={styles.historyNext}>Next: {excerpt(s.nextSessionNotes, 90)}</p> : null}
+                      {i === 0 || !hasSecondary ? (
+                        <>
+                          {s.clientCondition ? (
+                            <p className={styles.historyNotes} style={{ WebkitLineClamp: i === 0 ? 3 : 2 }}>
+                              Readiness: {excerpt(s.clientCondition, i === 0 ? 200 : 100)}
+                            </p>
+                          ) : null}
+                          {s.trainerNotes ? (
+                            <p className={styles.historyNotes} style={{ WebkitLineClamp: i === 0 ? 3 : 2 }}>
+                              Coach notes: {excerpt(s.trainerNotes, i === 0 ? 200 : 120)}
+                            </p>
+                          ) : null}
+                          {s.progressObservations ? (
+                            <p className={styles.historyNotes} style={{ WebkitLineClamp: i === 0 ? 3 : 2 }}>
+                              Progress: {excerpt(s.progressObservations, i === 0 ? 200 : 120)}
+                            </p>
+                          ) : null}
+                          {s.nextSessionNotes ? (
+                            <p className={styles.historyNext}>Next: {excerpt(s.nextSessionNotes, i === 0 ? 120 : 90)}</p>
+                          ) : null}
+                        </>
+                      ) : (
+                        <details className={styles.historyDetails}>
+                          <summary className={styles.historyDetailsSummary}>Notes, readiness &amp; next</summary>
+                          <div className={styles.historyDetailsBody}>
+                            {s.clientCondition ? (
+                              <p className={styles.historyDetailLine}>
+                                <strong>Readiness</strong> {s.clientCondition}
+                              </p>
+                            ) : null}
+                            {s.trainerNotes ? (
+                              <p className={styles.historyDetailLine}>
+                                <strong>Coach notes</strong> {s.trainerNotes}
+                              </p>
+                            ) : null}
+                            {s.progressObservations ? (
+                              <p className={styles.historyDetailLine}>
+                                <strong>Progress</strong> {s.progressObservations}
+                              </p>
+                            ) : null}
+                            {s.nextSessionNotes ? (
+                              <p className={styles.historyDetailLine}>
+                                <strong>Next</strong> {s.nextSessionNotes}
+                              </p>
+                            ) : null}
+                          </div>
+                        </details>
+                      )}
+                    </div>
+                    <Link to={`/clients/${client.id}/sessions/${s.id}/edit`} className="btn btn-ghost btn-sm">
+                      Edit
+                    </Link>
                   </div>
-                  <Link to={`/clients/${client.id}/sessions/${s.id}/edit`} className="btn btn-ghost btn-sm">
-                    Edit
-                  </Link>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -270,7 +380,11 @@ export function ClientDetailPage() {
 
       {tab === 'progress' && (
         <div>
-          {!progressSummary ? (
+          {supabase && sessionsLoading ? (
+            <div className={styles.emptyState} aria-live="polite">
+              Loading sessions…
+            </div>
+          ) : !progressSummary ? (
             <div className={styles.emptyState}>Log sessions to see progress over time.</div>
           ) : (
             <>
@@ -322,6 +436,42 @@ export function ClientDetailPage() {
           </Link>
         </div>
       )}
+
+      <section className={styles.roster}>
+        <h2 className={styles.rosterTitle}>Roster &amp; admin</h2>
+        <p className={styles.rosterCopy}>
+          <strong>Archive</strong> keeps their profile and logs but hides them from your main list and new manual bookings.{' '}
+          <strong>Delete</strong> removes the client, every session log, and coach-linked bookings — not reversible.
+        </p>
+        <div className={styles.rosterActions}>
+          {client.status !== 'paused' ? (
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => updateClient(client.id, { status: 'paused' })}>
+              Archive client
+            </button>
+          ) : (
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => updateClient(client.id, { status: 'active' })}>
+              Restore to active
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn btn-danger-ghost btn-sm"
+            onClick={() => {
+              if (
+                !window.confirm(
+                  `Delete ${client.name} permanently? All session logs and coach-linked bookings for them will be removed. This cannot be undone.`,
+                )
+              ) {
+                return;
+              }
+              deleteClient(client.id);
+              navigate('/clients');
+            }}
+          >
+            Delete permanently
+          </button>
+        </div>
+      </section>
     </div>
   );
 }

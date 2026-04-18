@@ -23,7 +23,7 @@ function colorFor(id: string) {
 type RosterTab = 'active' | 'archived';
 
 export function ClientsPage() {
-  const { clients } = useCoachData();
+  const { clients, clientsLoading, clientsFetchError, refreshClients } = useCoachData();
   const [q, setQ] = useState('');
   const [roster, setRoster] = useState<RosterTab>('active');
 
@@ -87,11 +87,22 @@ export function ClientsPage() {
       </div>
 
       <div className="card">
-        {filtered.length === 0 ? (
+        {clientsFetchError ? (
+          <div className="empty">
+            <p style={{ margin: '0 0 12px' }}>{clientsFetchError}</p>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => void refreshClients()}>
+              Try again
+            </button>
+          </div>
+        ) : clientsLoading ? (
+          <div className="empty">Loading clients…</div>
+        ) : filtered.length === 0 ? (
           <div className="empty">
             {roster === 'archived'
               ? 'No archived clients. Archive from a client profile instead of deleting if you want to hide someone.'
-              : 'No clients match your search.'}
+              : q.trim()
+                ? 'No clients match your search.'
+                : 'No clients yet. Tap + Add to create your first client.'}
           </div>
         ) : (
           filtered.map((c) => (

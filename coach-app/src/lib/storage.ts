@@ -81,12 +81,24 @@ export function loadAppState(): AppState {
 }
 
 /** Persist clients, session logs, availability, and bookings to localStorage. */
-export function saveAppState(state: AppState): void {
+export function saveAppState(
+  state: AppState,
+  options?: { persistClients?: boolean; persistAvailability?: boolean; persistBookings?: boolean },
+): void {
+  const persistClients = options?.persistClients ?? true;
+  const persistAvailability = options?.persistAvailability ?? true;
+  const persistBookings = options?.persistBookings ?? true;
   try {
-    localStorage.setItem(STORAGE_KEYS.clients, JSON.stringify(state.clients));
+    if (persistClients) {
+      localStorage.setItem(STORAGE_KEYS.clients, JSON.stringify(state.clients));
+    }
     localStorage.setItem(STORAGE_KEYS.sessionLogs, JSON.stringify(state.sessions));
-    localStorage.setItem(STORAGE_KEYS.availability, JSON.stringify(state.availability));
-    localStorage.setItem(STORAGE_KEYS.bookings, JSON.stringify(state.bookings));
+    if (persistAvailability) {
+      localStorage.setItem(STORAGE_KEYS.availability, JSON.stringify(state.availability));
+    }
+    if (persistBookings) {
+      localStorage.setItem(STORAGE_KEYS.bookings, JSON.stringify(state.bookings));
+    }
   } catch {
     /* quota or private mode */
   }

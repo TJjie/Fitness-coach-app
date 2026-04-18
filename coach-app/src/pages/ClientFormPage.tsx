@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import type { ClientStatus } from '../types/models';
 import { useCoachData } from '../context/CoachDataContext';
+import { insertClientToSupabase } from '../lib/insertClientToSupabase';
 
 const empty = {
   name: '',
@@ -24,6 +25,9 @@ export function ClientFormPage() {
   const client = isEdit && id ? clients.find((c) => c.id === id) : undefined;
 
   const [f, setF] = useState(empty);
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   /* eslint-disable react-hooks/set-state-in-effect -- form mirrors loaded client in edit mode */
   useEffect(() => {
@@ -53,15 +57,37 @@ export function ClientFormPage() {
 
   const upd = (k: keyof typeof f, v: string | ClientStatus) => setF((x) => ({ ...x, [k]: v }));
 
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!f.name.trim()) return;
+    setFormError(null);
+    setSuccessMsg(null);
+
     if (isEdit && id) {
       updateClient(id, f);
       navigate(`/clients/${id}`);
-    } else {
-      const c = addClient(f);
-      navigate(`/clients/${c.id}`);
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const newId = await insertClientToSupabase(f);
+      addClient({ ...f, id: newId });
+      setSuccessMsg('Client saved to Supabase.');
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, 900);
+      });
+      navigate(`/clients/${newId}`);
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'object' && err !== null && 'message' in err
+            ? String((err as { message: unknown }).message)
+            : 'Could not save client.';
+      setFormError(msg);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -74,6 +100,16 @@ export function ClientFormPage() {
       <p className="page-sub">Profile details stay private to your coach workspace.</p>
 
       <form onSubmit={onSubmit} className="card">
+        {successMsg ? (
+          <p role="status" style={{ margin: '0 0 12px', fontSize: 14, color: 'var(--text-secondary)' }}>
+            {successMsg}
+          </p>
+        ) : null}
+        {formError ? (
+          <p role="alert" style={{ margin: '0 0 12px', fontSize: 14, color: 'var(--danger)' }}>
+            {formError}
+          </p>
+        ) : null}
         <div className="field">
           <label htmlFor="name">Full name *</label>
           <input id="name" className="input" value={f.name} onChange={(e) => upd('name', e.target.value)} required />
@@ -118,8 +154,8 @@ export function ClientFormPage() {
           <Link to={isEdit && id ? `/clients/${id}` : '/clients'} className="btn btn-secondary">
             Cancel
           </Link>
-          <button type="submit" className="btn btn-primary">
-            {isEdit ? 'Save changes' : 'Create client'}
+          <button type="submit" className="btn btn-primary" disabled={submitting}>
+            {isEdit ? 'Save changes' : submitting ? 'Saving…' : 'Create client'}
           </button>
         </div>
       </form>
