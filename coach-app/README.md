@@ -52,11 +52,36 @@ From this folder (`coach-app/`):
 
 ## Deploy to Vercel
 
-1. Push the repo (or connect the repo in Vercel).
-2. **Root directory:** set the Vercel project **Root Directory** to `coach-app` if the Git repo root is above this folder (e.g. monorepo `incoming-project/`).
-3. **Framework preset:** Vite (auto-detected). Build command: `npm run build`, output: `dist`.
-4. **Environment variables (optional):** add `VITE_ACCESS_PASSWORD` in Vercel if you want the optional gate. Redeploy after adding/changing it.
-5. `vercel.json` in this folder rewrites client-side routes to `index.html` so React Router works on refresh and deep links (`/clients`, `/book`, etc.).
+### Option A — Dashboard (recommended first time)
+
+1. **Push Git to GitHub** (if this isn’t on GitHub yet): create an empty repo, then from the repo root (parent of `coach-app` if you use the monorepo layout):
+
+   ```bash
+   git remote add origin https://github.com/YOU/YOUR-REPO.git
+   git push -u origin main
+   ```
+
+2. In [Vercel](https://vercel.com): **Add New… → Project** → import that GitHub repo.
+
+3. **Root Directory:** set to **`coach-app`** (the folder that contains `package.json` and `vercel.json`).
+
+4. Leave **Framework Preset** as Vite (or “Other” with **Build** `npm run build` and **Output** `dist`).
+
+5. **Deploy.** Your app URL will look like `https://something.vercel.app`.
+
+6. *(Optional)* **Settings → Environment Variables:** add `VITE_ACCESS_PASSWORD`, then **Redeploy** so the access gate is baked into the build.
+
+`vercel.json` rewrites client routes to `index.html` so `/clients`, `/book`, etc. work on refresh.
+
+### Option B — CLI
+
+From `coach-app/`:
+
+```bash
+npx vercel login
+npx vercel link    # once per folder
+npx vercel --prod
+```
 
 No server, database, or `VITE_*` secrets are required for core behavior.
 
