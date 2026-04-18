@@ -1,4 +1,5 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { TRAINER } from '../types/models';
 
 function IconHome({ active }: { active?: boolean }) {
   return (
@@ -53,7 +54,7 @@ export function CoachLayout() {
       <aside className="coach-side" aria-label="Main navigation">
         <div className="coach-brand" style={{ padding: '8px 12px 20px' }}>
           <strong>CoachOS</strong>
-          <span>Rivera Coaching</span>
+          <span>{TRAINER.business}</span>
         </div>
         <nav className="stack-sm">
           <NavLink to="/" end className={({ isActive }) => `coach-side-link ${isActive ? 'active' : ''}`}>

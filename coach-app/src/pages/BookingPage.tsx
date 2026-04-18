@@ -77,7 +77,7 @@ export function BookingPage() {
           Book with {TRAINER.name}
         </h1>
         <p className="page-sub" style={{ marginBottom: 0 }}>
-          {TRAINER.business} · {TRAINER.location}
+          {TRAINER.business}
         </p>
       </header>
 
@@ -183,7 +183,6 @@ export function BookingPage() {
               ['Name', name],
               ['Email', email || '—'],
               ['Duration', '60 minutes'],
-              ['Where', TRAINER.location],
             ] as const
           ).map(([k, v]) => (
             <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--border)', fontSize: 14 }}>

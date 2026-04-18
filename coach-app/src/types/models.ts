@@ -54,7 +54,6 @@ export interface AppState {
 }
 
 export const TRAINER = {
-  name: 'Alex Rivera',
-  business: 'Rivera Coaching',
-  location: 'Studio — 128 Oak St, San Francisco',
+  name: 'Jie Tang',
+  business: 'Jie Coaching',
 } as const;
