@@ -1,0 +1,3 @@
+# Public booking flow invokes this without a user JWT.
+[functions.send-booking-confirmation]
+verify_jwt = false

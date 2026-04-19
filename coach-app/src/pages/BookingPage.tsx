@@ -1,15 +1,28 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useCoachData } from '../context/CoachDataContext';
+import {
+  buildGoogleCalendarAddUrl,
+  downloadBookingIcs,
+} from '../lib/bookingCalendarExport';
+import { formatLocalDateTimeLine } from '../lib/bookingOccurrence';
 import { insertPublicBookingFromSupabase } from '../lib/bookingsSupabase';
 import { formatDisplayDate } from '../lib/dates';
 import { isOccurrenceBooked, listOpenSlots } from '../lib/bookingSlots';
+import { sendBookingConfirmationEmail } from '../lib/sendBookingConfirmationEmail';
 import { supabase } from '../lib/supabaseClient';
 import { TRAINER } from '../types/models';
 
 type Step = 1 | 2 | 3;
 
 type SelectedSlot = { date: string; time: string; slotId: string; occurrenceStartAt: string };
+
+type ConfirmationState = {
+  selected: SelectedSlot;
+  name: string;
+  email: string;
+  emailDispatch: 'skipped' | 'sent' | 'failed';
+};
 
 export function BookingPage() {
   const {
@@ -26,7 +39,7 @@ export function BookingPage() {
   const [selected, setSelected] = useState<SelectedSlot | null>(null);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [done, setDone] = useState(false);
+  const [confirmation, setConfirmation] = useState<ConfirmationState | null>(null);
   const [confirmSubmitting, setConfirmSubmitting] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
 
@@ -48,6 +61,32 @@ export function BookingPage() {
   const dataLoading = Boolean(supabase && (availabilityLoading || bookingsLoading));
   const dataLoadError = availabilityFetchError || bookingsFetchError;
 
+  const finalizeConfirmation = async (slot: SelectedSlot, nameTrim: string, emailTrim: string) => {
+    let emailDispatch: ConfirmationState['emailDispatch'] = 'skipped';
+    if (emailTrim) {
+      if (supabase) {
+        const whenLabel = formatLocalDateTimeLine(slot.occurrenceStartAt);
+        const result = await sendBookingConfirmationEmail(supabase, {
+          to: emailTrim,
+          clientName: nameTrim,
+          whenLabel,
+          occurrenceStartAt: slot.occurrenceStartAt,
+          coachName: TRAINER.name,
+          coachBusiness: TRAINER.business,
+        });
+        emailDispatch = result.sent ? 'sent' : 'failed';
+      } else {
+        emailDispatch = 'failed';
+      }
+    }
+    setConfirmation({
+      selected: slot,
+      name: nameTrim,
+      email: emailTrim,
+      emailDispatch,
+    });
+  };
+
   const confirm = async () => {
     if (!selected || !name.trim()) return;
     setConfirmError(null);
@@ -56,21 +95,29 @@ export function BookingPage() {
       return;
     }
 
+    const nameTrim = name.trim();
+    const emailTrim = email.trim();
+
     if (!supabase) {
-      const created = addBooking({
-        clientName: name.trim(),
-        clientEmail: email.trim() || undefined,
-        date: selected.date,
-        time: selected.time,
-        source: 'public',
-        availabilitySlotId: selected.slotId,
-        occurrenceStartAt: selected.occurrenceStartAt,
-      });
-      if (!created) {
-        setConfirmError('That time was just taken. Please pick another slot.');
-        return;
+      setConfirmSubmitting(true);
+      try {
+        const created = addBooking({
+          clientName: nameTrim,
+          clientEmail: emailTrim || undefined,
+          date: selected.date,
+          time: selected.time,
+          source: 'public',
+          availabilitySlotId: selected.slotId,
+          occurrenceStartAt: selected.occurrenceStartAt,
+        });
+        if (!created) {
+          setConfirmError('That time was just taken. Please pick another slot.');
+          return;
+        }
+        await finalizeConfirmation(selected, nameTrim, emailTrim);
+      } finally {
+        setConfirmSubmitting(false);
       }
-      setDone(true);
       return;
     }
 
@@ -88,13 +135,13 @@ export function BookingPage() {
 
       const newId = await insertPublicBookingFromSupabase({
         availabilitySlotId: selected.slotId,
-        fullName: name.trim(),
-        email: email.trim(),
+        fullName: nameTrim,
+        email: emailTrim,
         occurrenceStartAt: selected.occurrenceStartAt,
       });
       const merged = addBooking({
-        clientName: name.trim(),
-        clientEmail: email.trim() || undefined,
+        clientName: nameTrim,
+        clientEmail: emailTrim || undefined,
         date: selected.date,
         time: selected.time,
         source: 'public',
@@ -106,8 +153,8 @@ export function BookingPage() {
         setConfirmError('That time was just taken. Please pick another slot.');
         return;
       }
-      setDone(true);
       void refreshBookings();
+      await finalizeConfirmation(selected, nameTrim, emailTrim);
     } catch (err) {
       const msg =
         err instanceof Error
@@ -121,7 +168,9 @@ export function BookingPage() {
     }
   };
 
-  if (done && selected) {
+  if (confirmation) {
+    const { selected: sel, email: bookedEmail, emailDispatch } = confirmation;
+    const whenShown = formatLocalDateTimeLine(sel.occurrenceStartAt);
     return (
       <div className="public-shell">
         <div className="card" style={{ textAlign: 'center', padding: '28px 20px' }}>
@@ -129,16 +178,57 @@ export function BookingPage() {
             ✓
           </div>
           <h1 className="page-title" style={{ fontSize: '1.5rem' }}>
-            You&apos;re booked
+            Booking confirmed
           </h1>
-          <p style={{ margin: '12px 0 0', color: 'var(--text-secondary)', fontSize: 15 }}>
-            {formatDisplayDate(selected.date)} at {selected.time}
+          <p style={{ margin: '10px 0 0', color: 'var(--text-secondary)', fontSize: 15, lineHeight: 1.45 }}>
+            {whenShown}
           </p>
-          {email ? (
-            <p style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>Confirmation details sent to {email}</p>
+          <p style={{ margin: '8px 0 0', fontSize: 15, color: 'var(--text-secondary)' }}>
+            {TRAINER.name}
+            <span style={{ color: 'var(--text-muted)' }}> · </span>
+            {TRAINER.business}
+          </p>
+          {emailDispatch === 'sent' ? (
+            <p style={{ margin: '18px 0 0', fontSize: 15, color: 'var(--text)' }}>A confirmation email has been sent.</p>
           ) : null}
-          <p style={{ margin: '20px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>
-            {TRAINER.name} will see this on their schedule. If you need to reschedule, contact them directly.
+          {emailDispatch === 'failed' && bookedEmail ? (
+            <p style={{ margin: '18px 0 0', fontSize: 15, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+              Your booking is confirmed. We could not send the confirmation email—please save this booking time.
+            </p>
+          ) : null}
+          {emailDispatch === 'skipped' ? (
+            <p style={{ margin: '18px 0 0', fontSize: 15, color: 'var(--text)' }}>Please save this booking time.</p>
+          ) : null}
+          <div
+            style={{
+              marginTop: 20,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+              maxWidth: 320,
+              marginLeft: 'auto',
+              marginRight: 'auto',
+            }}
+          >
+            <a
+              href={buildGoogleCalendarAddUrl(sel.occurrenceStartAt)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-secondary btn-sm btn-block"
+              style={{ textDecoration: 'none', textAlign: 'center' }}
+            >
+              Add to Google Calendar
+            </a>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm btn-block"
+              onClick={() => downloadBookingIcs(sel.occurrenceStartAt)}
+            >
+              Download Calendar File
+            </button>
+          </div>
+          <p style={{ margin: '20px 0 0', fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+            Contact your coach directly if you need to change or cancel this session.
           </p>
         </div>
       </div>
