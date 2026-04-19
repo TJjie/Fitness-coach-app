@@ -9,7 +9,7 @@ import { TRAINER } from '../types/models';
 
 type Step = 1 | 2 | 3;
 
-type SelectedSlot = { date: string; time: string; slotId: string };
+type SelectedSlot = { date: string; time: string; slotId: string; occurrenceStartAt: string };
 
 export function BookingPage() {
   const {
@@ -51,7 +51,7 @@ export function BookingPage() {
   const confirm = async () => {
     if (!selected || !name.trim()) return;
     setConfirmError(null);
-    if (isOccurrenceBooked(state.bookings, selected.slotId, selected.date, selected.time)) {
+    if (isOccurrenceBooked(state.bookings, selected.occurrenceStartAt)) {
       setConfirmError('That time was just taken. Please pick another slot.');
       return;
     }
@@ -64,6 +64,7 @@ export function BookingPage() {
         time: selected.time,
         source: 'public',
         availabilitySlotId: selected.slotId,
+        occurrenceStartAt: selected.occurrenceStartAt,
       });
       if (!created) {
         setConfirmError('That time was just taken. Please pick another slot.');
@@ -80,7 +81,7 @@ export function BookingPage() {
         setConfirmError('Could not verify availability. Please try again.');
         return;
       }
-      if (isOccurrenceBooked(latest, selected.slotId, selected.date, selected.time)) {
+      if (isOccurrenceBooked(latest, selected.occurrenceStartAt)) {
         setConfirmError('That time was just taken. Please pick another slot.');
         return;
       }
@@ -89,6 +90,7 @@ export function BookingPage() {
         availabilitySlotId: selected.slotId,
         fullName: name.trim(),
         email: email.trim(),
+        occurrenceStartAt: selected.occurrenceStartAt,
       });
       const merged = addBooking({
         clientName: name.trim(),
@@ -98,12 +100,14 @@ export function BookingPage() {
         source: 'public',
         id: newId,
         availabilitySlotId: selected.slotId,
+        occurrenceStartAt: selected.occurrenceStartAt,
       });
       if (!merged) {
         setConfirmError('That time was just taken. Please pick another slot.');
         return;
       }
       setDone(true);
+      void refreshBookings();
     } catch (err) {
       const msg =
         err instanceof Error
@@ -216,14 +220,21 @@ export function BookingPage() {
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                   {slots.map((s) => {
                     const sel =
-                      selected?.date === s.date && selected?.time === s.time && selected?.slotId === s.slotId;
+                      selected?.occurrenceStartAt === s.occurrenceStartAt && selected?.slotId === s.slotId;
                     return (
                       <button
                         key={s.key}
                         type="button"
                         className={`btn ${sel ? 'btn-primary' : 'btn-secondary'}`}
                         style={{ borderRadius: 999, padding: '8px 14px' }}
-                        onClick={() => setSelected({ date: s.date, time: s.time, slotId: s.slotId })}
+                        onClick={() =>
+                          setSelected({
+                            date: s.date,
+                            time: s.time,
+                            slotId: s.slotId,
+                            occurrenceStartAt: s.occurrenceStartAt,
+                          })
+                        }
                       >
                         {s.time}
                       </button>

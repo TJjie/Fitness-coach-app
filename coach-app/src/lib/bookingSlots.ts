@@ -1,17 +1,25 @@
 import type { Booking, WeeklyAvailability } from '../types/models';
-import { bookingKey, eachDateInRange, toISODate } from './dates';
+import { buildOccurrenceStartIsoFromLocalDateAndTimeLabel, occurrenceInstantsEqual } from './bookingOccurrence';
+import { eachDateInRange, toISODate } from './dates';
 
-export type OpenSlot = { date: string; time: string; key: string; slotId: string };
+export type OpenSlot = {
+  date: string;
+  time: string;
+  key: string;
+  slotId: string;
+  /** ISO instant for this concrete occurrence — persisted on book as `occurrence_start_at`. */
+  occurrenceStartAt: string;
+};
 
-/** True if this recurring slot occurrence is already taken (confirmed web booking vs same template+date+time, or legacy date+time only). */
-export function isOccurrenceBooked(bookings: Booking[], slotId: string, date: string, time: string): boolean {
-  const key = bookingKey(date, time);
+/**
+ * True if a confirmed booking already exists for this exact occurrence instant.
+ * Uses only `booking.occurrenceStartAt` (DB `occurrence_start_at`) — no weekday or time-label text matching.
+ * Compares by millisecond instant so UI generator and Supabase round-trips stay aligned.
+ */
+export function isOccurrenceBooked(bookings: Booking[], occurrenceStartAt: string): boolean {
   return bookings.some((b) => {
-    if (b.status !== 'confirmed') return false;
-    if (b.availabilitySlotId) {
-      return b.availabilitySlotId === slotId && b.date === date && b.time === time;
-    }
-    return bookingKey(b.date, b.time) === key;
+    if (b.status !== 'confirmed' || !b.occurrenceStartAt) return false;
+    return occurrenceInstantsEqual(b.occurrenceStartAt, occurrenceStartAt);
   });
 }
 
@@ -27,9 +35,9 @@ export function listOpenSlots(
     const dow = d.getDay();
     for (const slot of availability) {
       if (slot.dayOfWeek !== dow) continue;
-      if (isOccurrenceBooked(bookings, slot.id, iso, slot.time)) continue;
-      const key = bookingKey(iso, slot.time);
-      out.push({ date: iso, time: slot.time, key: `${slot.id}|${key}`, slotId: slot.id });
+      const occurrenceStartAt = buildOccurrenceStartIsoFromLocalDateAndTimeLabel(iso, slot.time);
+      if (isOccurrenceBooked(bookings, occurrenceStartAt)) continue;
+      out.push({ date: iso, time: slot.time, key: `${slot.id}|${occurrenceStartAt}`, slotId: slot.id, occurrenceStartAt });
     }
   }
   return out.sort((a, b) => (a.date !== b.date ? a.date.localeCompare(b.date) : a.time.localeCompare(b.time)));

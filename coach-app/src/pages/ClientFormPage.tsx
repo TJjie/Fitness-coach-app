@@ -11,7 +11,7 @@ const empty = {
   goal: '',
   frequency: '2× / week',
   notes: '',
-  injuries: '',
+  limitations: '',
   startDate: new Date().toISOString().slice(0, 10),
   status: 'active' as ClientStatus,
 };
@@ -39,7 +39,7 @@ export function ClientFormPage() {
         goal: client.goal,
         frequency: client.frequency,
         notes: client.notes,
-        injuries: client.injuries,
+        limitations: client.limitations,
         startDate: client.startDate,
         status: client.status,
       });
@@ -132,7 +132,7 @@ export function ClientFormPage() {
         </div>
         <div className="field">
           <label htmlFor="inj">Injuries / limitations</label>
-          <textarea id="inj" className="textarea" rows={2} value={f.injuries} onChange={(e) => upd('injuries', e.target.value)} />
+          <textarea id="inj" className="textarea" rows={2} value={f.limitations} onChange={(e) => upd('limitations', e.target.value)} />
         </div>
         <div className="field">
           <label htmlFor="notes">Coach notes</label>

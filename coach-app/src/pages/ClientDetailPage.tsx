@@ -1,9 +1,13 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { CoachingTipsModal } from '../components/CoachingTipsModal';
+import { useAuth } from '../context/AuthContext';
 import { useCoachData } from '../context/CoachDataContext';
 import { clientStatusLabel } from '../lib/clientStatusLabel';
 import { formatDisplayDate } from '../lib/dates';
 import { fetchSessionsForClientFromSupabase } from '../lib/fetchSessionsForClientFromSupabase';
+import { buildCoachingTipsContext, type CoachingTipsResult } from '../lib/buildCoachingTipsContext';
+import { requestCoachingTips } from '../lib/requestCoachingTips';
 import { supabase } from '../lib/supabaseClient';
 import styles from './ClientDetailPage.module.css';
 
@@ -18,10 +22,15 @@ function excerpt(text: string, max: number): string {
 export function ClientDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { session } = useAuth();
   const { clients, sessionsForClient, deleteClient, updateClient, replaceSessionsForClient } = useCoachData();
   const [tab, setTab] = useState<Tab>('history');
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [sessionsFetchError, setSessionsFetchError] = useState<string | null>(null);
+  const [tipsOpen, setTipsOpen] = useState(false);
+  const [tipsLoading, setTipsLoading] = useState(false);
+  const [tipsError, setTipsError] = useState<string | null>(null);
+  const [tipsResult, setTipsResult] = useState<CoachingTipsResult | null>(null);
   const client = clients.find((c) => c.id === id);
   const sessions = useMemo(() => (id ? sessionsForClient(id) : []), [id, sessionsForClient]);
 
@@ -84,6 +93,28 @@ export function ClientDetailPage() {
 
   const nextPlan = latest?.nextSessionNotes?.trim() ?? '';
 
+  const canUseAiTips = Boolean(supabase && session);
+  const aiTipsDisabledMessage = !supabase
+    ? 'AI tips need Supabase: set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, then deploy the generate-coaching-tips edge function and set the OPENAI_API_KEY secret.'
+    : !session
+      ? 'Sign in to use AI coaching tips.'
+      : undefined;
+
+  const onGenerateCoachingTips = async () => {
+    if (!supabase) return;
+    setTipsLoading(true);
+    setTipsError(null);
+    try {
+      const ctx = buildCoachingTipsContext(client, latest ?? null);
+      const out = await requestCoachingTips(supabase, ctx);
+      setTipsResult(out);
+    } catch (e) {
+      setTipsError(e instanceof Error ? e.message : 'Could not generate tips.');
+    } finally {
+      setTipsLoading(false);
+    }
+  };
+
   return (
     <div className={styles.page}>
       <Link to="/clients" className={`${styles.back} btn btn-ghost btn-sm`}>
@@ -124,6 +155,16 @@ export function ClientDetailPage() {
           </div>
         </div>
         <div className={styles.actions}>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => {
+              setTipsOpen(true);
+              setTipsError(null);
+            }}
+          >
+            Generate coaching tips
+          </button>
           <Link to={`/clients/${client.id}/edit`} className="btn btn-secondary btn-sm">
             Edit profile
           </Link>
@@ -277,7 +318,7 @@ export function ClientDetailPage() {
           </div>
           <div className={styles.profileSection}>
             <p className={styles.profileLabel}>Injuries / limitations</p>
-            <p className={styles.profileBody}>{client.injuries || 'None noted'}</p>
+            <p className={styles.profileBody}>{client.limitations || 'None noted'}</p>
           </div>
           <div className={styles.profileSection}>
             <p className={styles.profileLabel}>Coach notes</p>
@@ -472,6 +513,17 @@ export function ClientDetailPage() {
           </button>
         </div>
       </section>
+
+      <CoachingTipsModal
+        open={tipsOpen}
+        onClose={() => setTipsOpen(false)}
+        loading={tipsLoading}
+        error={tipsError}
+        result={tipsResult}
+        onGenerate={onGenerateCoachingTips}
+        canUseAi={canUseAiTips}
+        disabledMessage={aiTipsDisabledMessage}
+      />
     </div>
   );
 }

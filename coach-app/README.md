@@ -1,6 +1,6 @@
 # CoachOS (coach-app)
 
-Private coach workspace: clients, session logs, schedule, and a public booking page. Data stays in **this browser** via `localStorage` (no backend).
+Private coach workspace: clients, session logs, schedule, and a public booking page. With **Supabase** configured, coach routes require **email/password sign-in** (`/login`); the **public booking** page (`/book`) stays open. Data can sync via Supabase or fall back to `localStorage` when env vars are absent.
 
 ## Requirements
 
@@ -17,13 +17,13 @@ From this folder (`coach-app/`):
    npm install
    ```
 
-2. **(Optional) Access phrase**
+2. **Environment (Supabase)**
 
-   Copy `.env.example` to `.env` and set `VITE_ACCESS_PASSWORD` if you want a simple gate before the app loads. Rebuild after changing env vars.
+   Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` for coach sign-in and data. Create a coach user under **Supabase → Authentication**. Rebuild after changing env vars.
 
    ```bash
-   cp .env.example .env
-   # edit .env — optional
+   cp .env.example .env.local
+   # edit .env.local
    ```
 
 3. **Start dev server**
@@ -69,7 +69,7 @@ From this folder (`coach-app/`):
 
 5. **Deploy.** Your app URL will look like `https://something.vercel.app`.
 
-6. *(Optional)* **Settings → Environment Variables:** add `VITE_ACCESS_PASSWORD`, then **Redeploy** so the access gate is baked into the build.
+6. **Settings → Environment Variables:** add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, then **Redeploy**.
 
 `vercel.json` rewrites client routes to `index.html` so `/clients`, `/book`, etc. work on refresh.
 
@@ -83,13 +83,11 @@ npx vercel link    # once per folder
 npx vercel --prod
 ```
 
-No server, database, or `VITE_*` secrets are required for core behavior.
+Without Supabase env vars, the coach UI runs without login (local development only).
 
-## Optional access phrase
+## Coach sign-in
 
-If `VITE_ACCESS_PASSWORD` is set at **build** time, the app shows a single password screen until the correct phrase is entered. Unlock state is kept in **`sessionStorage`** (cleared when the tab closes).
-
-**Limitation:** the value is compiled into the frontend bundle. It only discourages casual visitors, not someone inspecting the assets.
+When Supabase is configured, open `/login` and sign in with the coach account. Session persists across refresh (Supabase Auth). Use **Log out** in the coach header to clear the session. The public **`/book`** route does not require sign-in.
 
 ## Data storage
 

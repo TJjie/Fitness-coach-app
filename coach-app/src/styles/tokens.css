@@ -1,0 +1,56 @@
+/**
+ * Design tokens — Apple Human Interface (light, content-first)
+ * System typography; minimal chrome; system blue accent.
+ */
+:root {
+  /* Surfaces (iOS grouped background) */
+  --bg: #f2f2f7;
+  --surface: #ffffff;
+  --surface-2: #e5e5ea;
+  --surface-pressed: #d1d1d6;
+
+  /* Hairlines */
+  --separator: rgba(60, 60, 67, 0.29);
+  --border: rgba(60, 60, 67, 0.12);
+  --border-strong: rgba(60, 60, 67, 0.18);
+  --shadow-sm: none;
+  --shadow: none;
+  --shadow-card: none;
+
+  /* Labels (SF-like) */
+  --text: #000000;
+  --text-secondary: rgba(60, 60, 67, 0.74);
+  --text-muted: rgba(60, 60, 67, 0.5);
+
+  /* System accent */
+  --accent: #007aff;
+  --accent-hover: #0062cc;
+  --accent-soft: rgba(0, 122, 255, 0.12);
+  --accent-mid: #5a9eff;
+  --accent-focus-ring: rgba(0, 122, 255, 0.35);
+
+  --warn: #c27a00;
+  --warn-soft: rgba(255, 204, 0, 0.18);
+  --danger: #ff3b30;
+  --danger-soft: rgba(255, 59, 48, 0.12);
+
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius: 10px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+
+  --font:
+    -apple-system, blinkmacsystemfont, 'SF Pro Text', 'SF Pro Display', 'Segoe UI', roboto, 'Helvetica Neue', arial,
+    sans-serif;
+  --font-serif: var(--font);
+  --font-weight-title: 700;
+  --font-weight-heading: 600;
+
+  --section-gap: 32px;
+  --card-padding: 16px;
+  --card-gap: 12px;
+  --header-h: 52px;
+  --nav-h: 64px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}

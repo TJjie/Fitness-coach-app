@@ -1,3 +1,4 @@
+import { occurrenceInstantLocalDate, occurrenceInstantLocalTimeHHmm } from './bookingOccurrence';
 import { supabase } from './supabaseClient';
 import type { Booking } from '../types/models';
 
@@ -14,27 +15,41 @@ function pickInsertedBookingId(row: Record<string, unknown>): string | null {
   return null;
 }
 
-function createdAtToDateIso(createdAt: unknown): string | null {
-  if (createdAt == null) return null;
-  if (typeof createdAt === 'string' && createdAt.length >= 10) return createdAt.slice(0, 10);
-  if (createdAt instanceof Date) return createdAt.toISOString().slice(0, 10);
-  const s = String(createdAt);
-  return s.length >= 10 ? s.slice(0, 10) : null;
+function parseOccurrenceFromRow(row: Record<string, unknown>): string | undefined {
+  const raw = row.occurrence_start_at;
+  if (raw == null || raw === '') return undefined;
+  const d = new Date(String(raw));
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d.toISOString();
+}
+
+function parseCreatedAtFromRow(row: Record<string, unknown>): string | undefined {
+  const raw = row.created_at;
+  if (raw == null || raw === '') return undefined;
+  const d = new Date(String(raw));
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d.toISOString();
 }
 
 /**
  * Map a `public.bookings` row to the app `Booking` shape.
- * Uses `created_at` for calendar date and `availability_slots.time_label` for time (via `timeBySlot`).
+ * Uses only `occurrence_start_at` for calendar date and time (single source of truth).
+ * Rows without a valid `occurrence_start_at` are skipped (no `created_at` / template fallback).
  */
-export function mapBookingRow(row: Record<string, unknown>, timeBySlot: Map<string, string>): Booking | null {
+export function mapBookingRow(row: Record<string, unknown>): Booking | null {
+  const occurrenceStartAt = parseOccurrenceFromRow(row);
+  if (!occurrenceStartAt) return null;
+
   const statusRaw = row.status;
   const status: Booking['status'] = statusRaw === 'cancelled' ? 'cancelled' : 'confirmed';
 
   const slotIdRaw = row.availability_slot_id;
   const slotId = slotIdRaw != null && String(slotIdRaw).length > 0 ? String(slotIdRaw) : '';
-  const time = slotId ? (timeBySlot.get(slotId) ?? '') : '';
-  const date = createdAtToDateIso(row.created_at);
-  if (!date || !time) return null;
+
+  const date = occurrenceInstantLocalDate(occurrenceStartAt);
+  const time = occurrenceInstantLocalTimeHHmm(occurrenceStartAt);
+
+  const bookedAt = parseCreatedAtFromRow(row);
 
   return {
     id: String(row.id ?? ''),
@@ -45,27 +60,14 @@ export function mapBookingRow(row: Record<string, unknown>, timeBySlot: Map<stri
     status,
     source: 'public',
     availabilitySlotId: slotId || undefined,
+    occurrenceStartAt,
+    bookedAt,
   };
 }
 
 export async function fetchBookingsFromSupabase(): Promise<Booking[]> {
   if (!supabase) {
     throw new Error('Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
-  }
-
-  const { data: slotRows, error: slotErr } = await supabase
-    .from('availability_slots')
-    .select('id, time_label')
-    .eq('is_active', true);
-
-  if (slotErr) throw slotErr;
-
-  const timeBySlot = new Map<string, string>();
-  for (const s of Array.isArray(slotRows) ? slotRows : []) {
-    const o = s as Record<string, unknown>;
-    const id = o.id != null ? String(o.id) : '';
-    if (!id) continue;
-    timeBySlot.set(id, String(o.time_label ?? ''));
   }
 
   const { data, error } = await supabase.from('bookings').select('*').order('created_at', { ascending: false });
@@ -75,7 +77,7 @@ export async function fetchBookingsFromSupabase(): Promise<Booking[]> {
   const rows = Array.isArray(data) ? data : [];
   const out: Booking[] = [];
   for (const r of rows) {
-    const b = mapBookingRow(r as Record<string, unknown>, timeBySlot);
+    const b = mapBookingRow(r as Record<string, unknown>);
     if (b) out.push(b);
   }
   return out;
@@ -85,6 +87,7 @@ export async function insertPublicBookingFromSupabase(input: {
   availabilitySlotId: string;
   fullName: string;
   email: string;
+  occurrenceStartAt: string;
 }): Promise<string> {
   if (!supabase) {
     throw new Error('Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
@@ -97,6 +100,7 @@ export async function insertPublicBookingFromSupabase(input: {
       full_name: input.fullName,
       email: input.email.length > 0 ? input.email : null,
       status: 'confirmed',
+      occurrence_start_at: input.occurrenceStartAt,
     })
     .select('*')
     .single();

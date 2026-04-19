@@ -5,7 +5,15 @@ import {
   deleteAvailabilitySlotFromSupabase,
   insertAvailabilitySlotToSupabase,
 } from '../lib/availabilitySlotsSupabase';
-import { formatDisplayDate, parseISODate, toISODate } from '../lib/dates';
+import { parseISODate, toISODate } from '../lib/dates';
+import {
+  buildOccurrenceStartIsoFromLocalDateAndTimeLabel,
+  formatLocalDateTimeLine,
+  occurrenceAppleTimeAndDate,
+  occurrenceInstantLocalDate,
+  occurrenceInstantLocalTimeHHmm,
+  occurrenceInstantsEqual,
+} from '../lib/bookingOccurrence';
 import { weekdayShort } from '../lib/bookingSlots';
 import { supabase } from '../lib/supabaseClient';
 import type { Booking, Client, WeeklyAvailability } from '../types/models';
@@ -26,23 +34,14 @@ function slotTaken(
   time: string,
   exceptId?: string,
 ): boolean {
+  const target = buildOccurrenceStartIsoFromLocalDateAndTimeLabel(date, time);
   return bookings.some(
     (b) =>
       b.status === 'confirmed' &&
       b.id !== exceptId &&
-      b.date === date &&
-      b.time === time,
+      Boolean(b.occurrenceStartAt) &&
+      occurrenceInstantsEqual(b.occurrenceStartAt!, target),
   );
-}
-
-function slotById(slots: WeeklyAvailability[], slotId: string | undefined): WeeklyAvailability | undefined {
-  if (!slotId) return undefined;
-  return slots.find((s) => s.id === slotId);
-}
-
-function slotTemplateLabel(slot: WeeklyAvailability | undefined): string {
-  if (!slot) return '—';
-  return slot.displayLabel ?? `${weekdayShort(slot.dayOfWeek)} · ${slot.time}`;
 }
 
 export function SchedulePage() {
@@ -71,21 +70,20 @@ export function SchedulePage() {
 
   const today = toISODate(new Date());
 
-  const upcoming = useMemo(
-    () =>
-      state.bookings
-        .filter((b) => b.status === 'confirmed' && b.date >= today)
-        .sort((a, b) => {
-          if (a.date !== b.date) return a.date.localeCompare(b.date);
-          return a.time.localeCompare(b.time);
-        }),
-    [state.bookings, today],
-  );
+  const upcoming = useMemo(() => {
+    return state.bookings
+      .filter((b) => {
+        if (b.status !== 'confirmed' || !b.occurrenceStartAt) return false;
+        return occurrenceInstantLocalDate(b.occurrenceStartAt) >= today;
+      })
+      .sort((a, b) => new Date(a.occurrenceStartAt!).getTime() - new Date(b.occurrenceStartAt!).getTime());
+  }, [state.bookings, today]);
 
   const upcomingWebCountBySlotId = useMemo(() => {
     const m = new Map<string, number>();
     for (const b of state.bookings) {
-      if (b.status !== 'confirmed' || b.date < today || !b.availabilitySlotId) continue;
+      if (b.status !== 'confirmed' || !b.availabilitySlotId || !b.occurrenceStartAt) continue;
+      if (occurrenceInstantLocalDate(b.occurrenceStartAt) < today) continue;
       const id = b.availabilitySlotId;
       m.set(id, (m.get(id) ?? 0) + 1);
     }
@@ -233,7 +231,7 @@ export function SchedulePage() {
             {sortedAvail.map((a) => {
               const webUpcoming = upcomingWebCountBySlotId.get(a.id) ?? 0;
               return (
-                <li key={a.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                <li key={a.id} style={{ padding: '8px 0', borderBottom: '0.5px solid var(--separator)' }}>
                   <div className="row-between" style={{ alignItems: 'flex-start' }}>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontWeight: 600 }}>{a.displayLabel ?? `${weekdayShort(a.dayOfWeek)} · ${a.time}`}</div>
@@ -274,11 +272,11 @@ export function SchedulePage() {
       ) : null}
 
       <div className="row-between" style={{ marginBottom: 10 }}>
-        <h2 className="card-title" style={{ margin: 0 }}>
+        <h2 className="dash-section-label" style={{ margin: 0 }}>
           Upcoming bookings
         </h2>
-        <button type="button" className="btn btn-primary btn-sm" onClick={() => setShowBook(true)}>
-          + Book manually
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowBook(true)}>
+          Book manually
         </button>
       </div>
 
@@ -291,35 +289,33 @@ export function SchedulePage() {
           <p className="empty" style={{ padding: '12px 0' }}>No confirmed bookings ahead.</p>
         ) : (
           upcoming.map((b) => {
-            const slot = slotById(state.availability, b.availabilitySlotId);
-            const slotLine = slotTemplateLabel(slot);
+            const whenIso = b.occurrenceStartAt!;
+            const { time, date } = occurrenceAppleTimeAndDate(whenIso);
             return (
-              <div key={b.id} className="list-row" style={{ cursor: 'default', alignItems: 'flex-start' }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600 }}>{b.clientName}</div>
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
-                    <strong style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>When:</strong>{' '}
-                    {formatDisplayDate(b.date)} · {b.time}
-                  </div>
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
-                    <strong style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Slot:</strong> {slotLine}
-                  </div>
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
-                    <strong style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Email:</strong>{' '}
+              <div key={b.id} className="reminder-row" style={{ cursor: 'default' }}>
+                <div className="reminder-timecol">
+                  <span className="reminder-time">{time}</span>
+                  <span className="reminder-date">{date}</span>
+                </div>
+                <div className="reminder-body">
+                  <div className="reminder-title">{b.clientName}</div>
+                  <div className="reminder-meta">
                     {b.clientEmail ?? '—'}
+                    <span className="dash-muted-dot"> · </span>
+                    Booked {b.bookedAt ? formatLocalDateTimeLine(b.bookedAt) : '—'}
                   </div>
-                  <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Source:</span>
+                  <div className="booking-inline-tags">
+                    <span className="tag-muted">Source</span>
                     <span className="tag" style={{ fontSize: 11 }}>
                       {b.source === 'public' ? 'Web' : 'Coach'}
                     </span>
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Status:</span>
+                    <span className="tag-muted">Status</span>
                     <span className={`tag ${b.status === 'confirmed' ? 'tag-active' : 'tag-paused'}`} style={{ fontSize: 11 }}>
                       {b.status === 'confirmed' ? 'Confirmed' : b.status}
                     </span>
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                <div className="reminder-actions">
                   <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditBooking(b)}>
                     Edit
                   </button>
@@ -382,7 +378,16 @@ function ManualBookingModal({
   clients: Client[];
   availability: WeeklyAvailability[];
   onClose: () => void;
-  onSave: (p: { clientId: string; clientName: string; clientEmail?: string; date: string; time: string; source: 'coach' }) => void;
+  onSave: (p: {
+    clientId: string;
+    clientName: string;
+    clientEmail?: string;
+    date: string;
+    time: string;
+    source: 'coach';
+    occurrenceStartAt: string;
+    availabilitySlotId?: string;
+  }) => void;
 }) {
   const [clientId, setClientId] = useState(clients[0]?.id ?? '');
   const [date, setDate] = useState(toISODate(new Date()));
@@ -470,6 +475,9 @@ function ManualBookingModal({
             disabled={!client}
             onClick={() => {
               if (!client) return;
+              const occurrenceStartAt = buildOccurrenceStartIsoFromLocalDateAndTimeLabel(date, time);
+              const dow = parseISODate(date).getDay();
+              const matching = availability.filter((a) => a.dayOfWeek === dow && a.time === time);
               onSave({
                 clientId: client.id,
                 clientName: client.name,
@@ -477,6 +485,8 @@ function ManualBookingModal({
                 date,
                 time,
                 source: 'coach',
+                occurrenceStartAt,
+                availabilitySlotId: matching.length === 1 ? matching[0].id : undefined,
               });
             }}
           >
@@ -486,6 +496,14 @@ function ManualBookingModal({
       </div>
     </div>
   );
+}
+
+/** Exact name match (case-insensitive); first wins if several roster entries share a name. */
+function resolveClientFromBookedByName(clients: Client[], bookedBy: string): Client | undefined {
+  const t = bookedBy.trim();
+  if (!t) return undefined;
+  const lower = t.toLowerCase();
+  return clients.find((c) => c.name.trim().toLowerCase() === lower);
 }
 
 function EditBookingModal({
@@ -501,9 +519,13 @@ function EditBookingModal({
   onClose: () => void;
   onSave: (patch: Partial<Booking>) => void;
 }) {
-  const [clientId, setClientId] = useState(booking.clientId ?? clients[0]?.id ?? '');
-  const [date, setDate] = useState(booking.date);
-  const [time, setTime] = useState(booking.time);
+  const [bookedBy, setBookedBy] = useState(booking.clientName);
+  const [date, setDate] = useState(
+    booking.occurrenceStartAt ? occurrenceInstantLocalDate(booking.occurrenceStartAt) : booking.date,
+  );
+  const [time, setTime] = useState(
+    booking.occurrenceStartAt ? occurrenceInstantLocalTimeHHmm(booking.occurrenceStartAt) : booking.time,
+  );
 
   const timeOptions = useMemo(() => {
     const dow = parseISODate(date).getDay();
@@ -513,7 +535,7 @@ function EditBookingModal({
     return Array.from(merged).sort();
   }, [availability, date, time]);
 
-  const client = clients.find((c) => c.id === clientId);
+  const bookedByListId = 'eb-booked-by-suggestions';
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -522,14 +544,21 @@ function EditBookingModal({
           Edit booking
         </h2>
         <div className="field">
-          <label htmlFor="eb-client">Client</label>
-          <select id="eb-client" className="select" value={clientId} onChange={(e) => setClientId(e.target.value)}>
+          <label htmlFor="eb-booked-by">Booked by</label>
+          <input
+            id="eb-booked-by"
+            className="input"
+            list={bookedByListId}
+            autoComplete="off"
+            value={bookedBy}
+            onChange={(e) => setBookedBy(e.target.value)}
+            placeholder="Name or pick from roster"
+          />
+          <datalist id={bookedByListId}>
             {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
+              <option key={c.id} value={c.name} />
             ))}
-          </select>
+          </datalist>
         </div>
         <div className="field">
           <label htmlFor="eb-date">Date</label>
@@ -564,16 +593,25 @@ function EditBookingModal({
           <button
             type="button"
             className="btn btn-primary"
-            disabled={!client}
-            onClick={() =>
+            disabled={!bookedBy.trim()}
+            onClick={() => {
+              const occurrenceStartAt = buildOccurrenceStartIsoFromLocalDateAndTimeLabel(date, time);
+              const dow = parseISODate(date).getDay();
+              const matching = availability.filter((a) => a.dayOfWeek === dow && a.time === time);
+              const availabilitySlotId =
+                matching.length === 1 ? matching[0].id : booking.availabilitySlotId;
+              const name = bookedBy.trim();
+              const rosterMatch = resolveClientFromBookedByName(clients, name);
               onSave({
-                clientId: client?.id,
-                clientName: client?.name ?? booking.clientName,
-                clientEmail: client?.email ?? booking.clientEmail,
+                clientName: name,
+                clientId: rosterMatch?.id,
+                clientEmail: rosterMatch?.email ?? booking.clientEmail,
                 date,
                 time,
-              })
-            }
+                occurrenceStartAt,
+                availabilitySlotId,
+              });
+            }}
           >
             Save
           </button>

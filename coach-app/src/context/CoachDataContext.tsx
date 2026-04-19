@@ -9,8 +9,8 @@ import {
   type ReactNode,
 } from 'react';
 import type { AppState, Booking, Client, SessionLog, WeeklyAvailability } from '../types/models';
+import { buildOccurrenceStartIsoFromLocalDateAndTimeLabel, occurrenceInstantLocalDate, occurrenceInstantLocalTimeHHmm } from '../lib/bookingOccurrence';
 import { isOccurrenceBooked } from '../lib/bookingSlots';
-import { bookingKey } from '../lib/dates';
 import { fetchAvailabilitySlotsFromSupabase } from '../lib/availabilitySlotsSupabase';
 import { fetchBookingsFromSupabase } from '../lib/bookingsSupabase';
 import { fetchClientsFromSupabase } from '../lib/fetchClientsFromSupabase';
@@ -155,10 +155,8 @@ export function CoachDataProvider({ children }: { children: ReactNode }) {
 
   const isSlotBooked = useCallback(
     (date: string, time: string) => {
-      const key = bookingKey(date, time);
-      return state.bookings.some(
-        (b) => b.status === 'confirmed' && bookingKey(b.date, b.time) === key,
-      );
+      const iso = buildOccurrenceStartIsoFromLocalDateAndTimeLabel(date, time);
+      return isOccurrenceBooked(state.bookings, iso);
     },
     [state.bookings],
   );
@@ -228,27 +226,49 @@ export function CoachDataProvider({ children }: { children: ReactNode }) {
 
   const addBooking = useCallback(
     (input: Omit<Booking, 'id' | 'status'> & { id?: string }): Booking | null => {
-      if (input.availabilitySlotId) {
-        if (isOccurrenceBooked(state.bookings, input.availabilitySlotId, input.date, input.time)) return null;
-      } else if (isSlotBooked(input.date, input.time)) {
-        return null;
-      }
+      const occurrenceStartAt =
+        input.occurrenceStartAt ??
+        (input.date && input.time ? buildOccurrenceStartIsoFromLocalDateAndTimeLabel(input.date, input.time) : undefined);
+      if (!occurrenceStartAt) return null;
+      if (isOccurrenceBooked(state.bookings, occurrenceStartAt)) return null;
+
       const { id: providedId, ...fields } = input;
+      const date = occurrenceInstantLocalDate(occurrenceStartAt);
+      const time = occurrenceInstantLocalTimeHHmm(occurrenceStartAt);
       const booking: Booking = {
         ...fields,
+        date,
+        time,
+        occurrenceStartAt,
+        bookedAt: input.bookedAt ?? new Date().toISOString(),
         id: providedId ?? crypto.randomUUID(),
         status: 'confirmed',
       };
       setState((s) => ({ ...s, bookings: [...s.bookings, booking] }));
       return booking;
     },
-    [isSlotBooked, state.bookings],
+    [state.bookings],
   );
 
   const updateBooking = useCallback((id: string, patch: Partial<Booking>) => {
     setState((s) => ({
       ...s,
-      bookings: s.bookings.map((b) => (b.id === id ? { ...b, ...patch } : b)),
+      bookings: s.bookings.map((b) => {
+        if (b.id !== id) return b;
+        const merged: Booking = { ...b, ...patch };
+        if (merged.occurrenceStartAt) {
+          return {
+            ...merged,
+            date: occurrenceInstantLocalDate(merged.occurrenceStartAt),
+            time: occurrenceInstantLocalTimeHHmm(merged.occurrenceStartAt),
+          };
+        }
+        if (merged.date && merged.time) {
+          const occ = buildOccurrenceStartIsoFromLocalDateAndTimeLabel(merged.date, merged.time);
+          return { ...merged, occurrenceStartAt: occ, date: occurrenceInstantLocalDate(occ), time: occurrenceInstantLocalTimeHHmm(occ) };
+        }
+        return merged;
+      }),
     }));
   }, []);
 

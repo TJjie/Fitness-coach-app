@@ -12,14 +12,6 @@ function initials(name: string) {
     .toUpperCase();
 }
 
-const colors = ['#2f5d4f', '#1d4ed8', '#6d28d9', '#a16207', '#b42318'];
-
-function colorFor(id: string) {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h += id.charCodeAt(i);
-  return colors[h % colors.length];
-}
-
 type RosterTab = 'active' | 'archived';
 
 export function ClientsPage() {
@@ -50,27 +42,19 @@ export function ClientsPage() {
         <h1 className="page-title" style={{ margin: 0 }}>
           Clients
         </h1>
-        <Link to="/clients/new" className="btn btn-primary btn-sm">
-          + Add
+        <Link to="/clients/new" className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>
+          Add
         </Link>
       </div>
       <p className="page-sub">
         {activeCount} active · {archivedCount} archived
       </p>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-        <button
-          type="button"
-          className={`btn btn-sm ${roster === 'active' ? 'btn-primary' : 'btn-secondary'}`}
-          onClick={() => setRoster('active')}
-        >
-          Active roster
+      <div className="tabs" style={{ marginBottom: 16 }} role="tablist" aria-label="Roster">
+        <button type="button" className={roster === 'active' ? 'active' : ''} onClick={() => setRoster('active')}>
+          Active
         </button>
-        <button
-          type="button"
-          className={`btn btn-sm ${roster === 'archived' ? 'btn-primary' : 'btn-secondary'}`}
-          onClick={() => setRoster('archived')}
-        >
+        <button type="button" className={roster === 'archived' ? 'active' : ''} onClick={() => setRoster('archived')}>
           Archived
         </button>
       </div>
@@ -107,10 +91,10 @@ export function ClientsPage() {
         ) : (
           filtered.map((c) => (
             <Link key={c.id} to={`/clients/${c.id}`} className="list-row">
-              <div className="avatar" style={{ background: colorFor(c.id) }}>{initials(c.name)}</div>
+              <div className="avatar">{initials(c.name)}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600 }}>{c.name}</div>
-                <div style={{ fontSize: '13px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ fontSize: 17, fontWeight: 400, letterSpacing: '-0.02em' }}>{c.name}</div>
+                <div style={{ fontSize: 15, color: 'var(--text-secondary)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {c.goal}
                 </div>
               </div>

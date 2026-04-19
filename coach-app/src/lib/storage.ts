@@ -1,4 +1,4 @@
-import type { AppState } from '../types/models';
+import type { AppState, Client } from '../types/models';
 
 /** Previous single-blob key (migrate once, then remove). */
 const LEGACY_STORAGE_KEY = 'coach-os-mvp.v1';
@@ -19,13 +19,28 @@ function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
 }
 
+/** Migrate legacy `injuries` key from localStorage to `limitations` (matches DB / Client type). */
+function migrateStoredClientShape(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object') return raw;
+  const o = { ...(raw as Record<string, unknown>) };
+  const limitations =
+    typeof o.limitations === 'string'
+      ? o.limitations
+      : typeof o.injuries === 'string'
+        ? o.injuries
+        : '';
+  delete o.injuries;
+  o.limitations = limitations;
+  return o;
+}
+
 /** Normalize a full or partial persisted object into a valid AppState. */
 export function normalizeAppState(raw: unknown): AppState {
   const e = emptyAppState();
   if (!raw || typeof raw !== 'object') return e;
   const o = raw as Record<string, unknown>;
   return {
-    clients: asArray(o.clients),
+    clients: asArray(o.clients).map(migrateStoredClientShape) as Client[],
     sessions: asArray(o.sessions),
     availability: asArray(o.availability),
     bookings: asArray(o.bookings),
@@ -58,7 +73,7 @@ function readJson(key: string): unknown {
 export function loadAppState(): AppState {
   if (hasSplitFormat()) {
     return {
-      clients: asArray(readJson(STORAGE_KEYS.clients)),
+      clients: asArray(readJson(STORAGE_KEYS.clients)).map(migrateStoredClientShape) as Client[],
       sessions: asArray(readJson(STORAGE_KEYS.sessionLogs)),
       availability: asArray(readJson(STORAGE_KEYS.availability)),
       bookings: asArray(readJson(STORAGE_KEYS.bookings)),

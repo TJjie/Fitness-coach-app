@@ -1,4 +1,6 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabaseClient';
 import { TRAINER } from '../types/models';
 
 function IconHome({ active }: { active?: boolean }) {
@@ -46,15 +48,17 @@ function IconCalendar({ active }: { active?: boolean }) {
 
 export function CoachLayout() {
   const { pathname } = useLocation();
+  const { session, signOut } = useAuth();
   const isClients = pathname.startsWith('/clients');
   const isSchedule = pathname.startsWith('/schedule');
+  const showLogout = Boolean(supabase && session);
 
   return (
     <div className="coach-shell">
       <aside className="coach-side" aria-label="Main navigation">
         <div className="coach-brand" style={{ padding: '8px 12px 20px' }}>
-          <strong>CoachOS</strong>
-          <span>{TRAINER.business}</span>
+          <strong>{TRAINER.business}</strong>
+          <span>{TRAINER.name}</span>
         </div>
         <nav className="stack-sm">
           <NavLink to="/" end className={({ isActive }) => `coach-side-link ${isActive ? 'active' : ''}`}>
@@ -78,9 +82,18 @@ export function CoachLayout() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <header className="coach-header">
           <div className="coach-brand">
-            <strong>CoachOS</strong>
-            <span>Coach workspace</span>
+            <strong>{TRAINER.business}</strong>
+            <span>Workspace</span>
           </div>
+          {showLogout ? (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => void signOut()}
+            >
+              Log out
+            </button>
+          ) : null}
         </header>
 
         <main className="coach-main">

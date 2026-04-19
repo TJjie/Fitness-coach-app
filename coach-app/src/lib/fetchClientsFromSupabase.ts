@@ -20,7 +20,7 @@ export function mapSupabaseClientRow(row: Record<string, unknown>): Client {
     goal: String(row.goal ?? ''),
     frequency: String(row.training_frequency ?? ''),
     notes: String(row.notes ?? ''),
-    injuries: String(row.limitations ?? ''),
+    limitations: String(row.limitations ?? ''),
     startDate,
     status: asStatus(row.status),
     createdAt: typeof row.created_at === 'string' ? row.created_at : undefined,

@@ -8,7 +8,7 @@ export interface Client {
   goal: string;
   frequency: string;
   notes: string;
-  injuries: string;
+  limitations: string;
   startDate: string;
   status: ClientStatus;
   /** From Supabase `created_at` when loaded from the database */
@@ -50,6 +50,13 @@ export interface Booking {
   source: BookingSource;
   /** Set when row comes from `bookings.availability_slot_id` (public web booking). */
   availabilitySlotId?: string;
+  /**
+   * Exact concrete occurrence instant (DB `occurrence_start_at`, timestamptz).
+   * When set, `date` / `time` are derived from this instant in local time for display only.
+   */
+  occurrenceStartAt?: string;
+  /** When the booking row was created (DB `created_at`, timestamptz). */
+  bookedAt?: string;
 }
 
 export interface AppState {

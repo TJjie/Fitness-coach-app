@@ -8,7 +8,7 @@ export type NewClientFormPayload = {
   goal: string;
   frequency: string;
   notes: string;
-  injuries: string;
+  limitations: string;
   startDate: string;
   status: ClientStatus;
 };
@@ -36,7 +36,7 @@ export async function insertClientToSupabase(f: NewClientFormPayload): Promise<s
   }
 
   const coachNotes = f.notes.trim();
-  const limitations = f.injuries.trim();
+  const limitations = f.limitations.trim();
   const notes =
     limitations.length > 0
       ? [coachNotes, `Injuries / limitations: ${limitations}`].filter(Boolean).join('\n\n')
