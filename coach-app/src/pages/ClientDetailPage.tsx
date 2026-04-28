@@ -4,11 +4,13 @@ import { CoachingTipsModal } from '../components/CoachingTipsModal';
 import { useAuth } from '../context/AuthContext';
 import { useCoachData } from '../context/CoachDataContext';
 import { clientStatusLabel } from '../lib/clientStatusLabel';
+import { deleteClientFromSupabase } from '../lib/deleteClientFromSupabase';
 import { formatDisplayDate } from '../lib/dates';
 import { fetchSessionsForClientFromSupabase } from '../lib/fetchSessionsForClientFromSupabase';
 import { buildCoachingTipsContext, type CoachingTipsResult } from '../lib/buildCoachingTipsContext';
 import { requestCoachingTips } from '../lib/requestCoachingTips';
 import { supabase } from '../lib/supabaseClient';
+import { updateClientInSupabase } from '../lib/updateClientInSupabase';
 import styles from './ClientDetailPage.module.css';
 
 type Tab = 'overview' | 'history' | 'progress' | 'next';
@@ -23,7 +25,7 @@ export function ClientDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { session } = useAuth();
-  const { clients, sessionsForClient, deleteClient, updateClient, replaceSessionsForClient } = useCoachData();
+  const { clients, sessionsForClient, deleteClient, updateClient, replaceSessionsForClient, refreshClients } = useCoachData();
   const [tab, setTab] = useState<Tab>('history');
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [sessionsFetchError, setSessionsFetchError] = useState<string | null>(null);
@@ -31,6 +33,8 @@ export function ClientDetailPage() {
   const [tipsLoading, setTipsLoading] = useState(false);
   const [tipsError, setTipsError] = useState<string | null>(null);
   const [tipsResult, setTipsResult] = useState<CoachingTipsResult | null>(null);
+  const [mutationLoading, setMutationLoading] = useState(false);
+  const [mutationError, setMutationError] = useState<string | null>(null);
   const client = clients.find((c) => c.id === id);
   const sessions = useMemo(() => (id ? sessionsForClient(id) : []), [id, sessionsForClient]);
 
@@ -115,6 +119,74 @@ export function ClientDetailPage() {
     }
   };
 
+  const setArchivedState = async (status: 'active' | 'paused') => {
+    if (!client) return;
+    setMutationError(null);
+    setMutationLoading(true);
+    try {
+      if (supabase) {
+        await updateClientInSupabase(client.id, {
+          name: client.name,
+          email: client.email,
+          phone: client.phone,
+          goal: client.goal,
+          frequency: client.frequency,
+          notes: client.notes,
+          limitations: client.limitations,
+          startDate: client.startDate,
+          status,
+        });
+        await refreshClients();
+      } else {
+        updateClient(client.id, { status });
+      }
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'object' && err !== null && 'message' in err
+            ? String((err as { message: unknown }).message)
+            : status === 'paused'
+              ? 'Could not archive client.'
+              : 'Could not restore client.';
+      setMutationError(msg);
+    } finally {
+      setMutationLoading(false);
+    }
+  };
+
+  const onDeleteClient = async () => {
+    if (!client) return;
+    if (
+      !window.confirm(
+        `Delete ${client.name} permanently? All session logs and coach-linked bookings for them will be removed. This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setMutationError(null);
+    setMutationLoading(true);
+    try {
+      if (supabase) {
+        await deleteClientFromSupabase(client.id);
+        await refreshClients();
+      } else {
+        deleteClient(client.id);
+      }
+      navigate('/clients');
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'object' && err !== null && 'message' in err
+            ? String((err as { message: unknown }).message)
+            : 'Could not delete client.';
+      setMutationError(msg);
+    } finally {
+      setMutationLoading(false);
+    }
+  };
+
   return (
     <div className={styles.page}>
       <Link to="/clients" className={`${styles.back} btn btn-ghost btn-sm`}>
@@ -127,6 +199,11 @@ export function ClientDetailPage() {
           <button type="button" className="btn btn-secondary btn-sm" onClick={() => void loadSessions()}>
             Try again
           </button>
+        </div>
+      ) : null}
+      {mutationError ? (
+        <div className={styles.emptyState} style={{ marginBottom: 16 }}>
+          <p style={{ margin: 0 }}>{mutationError}</p>
         </div>
       ) : null}
 
@@ -486,28 +563,19 @@ export function ClientDetailPage() {
         </p>
         <div className={styles.rosterActions}>
           {client.status !== 'paused' ? (
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => updateClient(client.id, { status: 'paused' })}>
+            <button type="button" className="btn btn-secondary btn-sm" disabled={mutationLoading} onClick={() => void setArchivedState('paused')}>
               Archive client
             </button>
           ) : (
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => updateClient(client.id, { status: 'active' })}>
+            <button type="button" className="btn btn-secondary btn-sm" disabled={mutationLoading} onClick={() => void setArchivedState('active')}>
               Restore to active
             </button>
           )}
           <button
             type="button"
             className="btn btn-danger-ghost btn-sm"
-            onClick={() => {
-              if (
-                !window.confirm(
-                  `Delete ${client.name} permanently? All session logs and coach-linked bookings for them will be removed. This cannot be undone.`,
-                )
-              ) {
-                return;
-              }
-              deleteClient(client.id);
-              navigate('/clients');
-            }}
+            disabled={mutationLoading}
+            onClick={() => void onDeleteClient()}
           >
             Delete permanently
           </button>

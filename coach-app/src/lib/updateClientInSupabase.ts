@@ -1,8 +1,8 @@
 import type { ClientStatus } from '../types/models';
-import { pickClientRowPrimaryKey } from './clientRowPrimaryKey';
+import { getClientPrimaryKeyColumnName } from './clientRowPrimaryKey';
 import { supabase } from './supabaseClient';
 
-export type NewClientFormPayload = {
+export type UpdateClientPayload = {
   name: string;
   email: string;
   phone: string;
@@ -14,11 +14,7 @@ export type NewClientFormPayload = {
   status: ClientStatus;
 };
 
-/**
- * Inserts a row into the public `clients` table (snake_case columns).
- * Returns the new row primary key (see VITE_SUPABASE_CLIENTS_ID_COLUMN if not named `id`).
- */
-export async function insertClientToSupabase(f: NewClientFormPayload): Promise<string> {
+export async function updateClientInSupabase(clientId: string, f: UpdateClientPayload): Promise<void> {
   if (!supabase) {
     throw new Error('Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
   }
@@ -30,9 +26,10 @@ export async function insertClientToSupabase(f: NewClientFormPayload): Promise<s
       ? [coachNotes, `Injuries / limitations: ${limitations}`].filter(Boolean).join('\n\n')
       : coachNotes;
 
-  const { data, error } = await supabase
+  const pk = getClientPrimaryKeyColumnName();
+  const { error } = await supabase
     .from('clients')
-    .insert({
+    .update({
       name: f.name.trim(),
       email: f.email.trim(),
       phone: f.phone.trim(),
@@ -43,16 +40,7 @@ export async function insertClientToSupabase(f: NewClientFormPayload): Promise<s
       start_date: f.startDate,
       status: f.status,
     })
-    .select('*')
-    .single();
+    .eq(pk, clientId);
 
   if (error) throw error;
-  const row = data && typeof data === 'object' ? (data as Record<string, unknown>) : null;
-  const id = row ? pickClientRowPrimaryKey(row) : null;
-  if (!id) {
-    throw new Error(
-      'Supabase did not return a usable client primary key. Set VITE_SUPABASE_CLIENTS_ID_COLUMN to your PK column name.',
-    );
-  }
-  return id;
 }

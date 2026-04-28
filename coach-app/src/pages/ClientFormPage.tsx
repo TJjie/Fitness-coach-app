@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import type { ClientStatus } from '../types/models';
 import { useCoachData } from '../context/CoachDataContext';
+import { deleteClientFromSupabase } from '../lib/deleteClientFromSupabase';
 import { insertClientToSupabase } from '../lib/insertClientToSupabase';
+import { supabase } from '../lib/supabaseClient';
+import { updateClientInSupabase } from '../lib/updateClientInSupabase';
 
 const empty = {
   name: '',
@@ -20,12 +23,13 @@ export function ClientFormPage() {
   const { id } = useParams();
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const { clients, addClient, updateClient, deleteClient } = useCoachData();
+  const { clients, addClient, updateClient, deleteClient, refreshClients } = useCoachData();
   const isEdit = pathname.endsWith('/edit') && Boolean(id);
   const client = isEdit && id ? clients.find((c) => c.id === id) : undefined;
 
   const [f, setF] = useState(empty);
   const [submitting, setSubmitting] = useState(false);
+  const [dangerSubmitting, setDangerSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -64,7 +68,26 @@ export function ClientFormPage() {
     setSuccessMsg(null);
 
     if (isEdit && id) {
-      updateClient(id, f);
+      setSubmitting(true);
+      try {
+        if (supabase) {
+          await updateClientInSupabase(id, f);
+          await refreshClients();
+        } else {
+          updateClient(id, f);
+        }
+      } catch (err) {
+        const msg =
+          err instanceof Error
+            ? err.message
+            : typeof err === 'object' && err !== null && 'message' in err
+              ? String((err as { message: unknown }).message)
+              : 'Could not update client.';
+        setFormError(msg);
+        return;
+      } finally {
+        setSubmitting(false);
+      }
       navigate(`/clients/${id}`);
       return;
     }
@@ -73,6 +96,7 @@ export function ClientFormPage() {
     try {
       const newId = await insertClientToSupabase(f);
       addClient({ ...f, id: newId });
+      await refreshClients();
       setSuccessMsg('Client saved to Supabase.');
       await new Promise<void>((resolve) => {
         window.setTimeout(resolve, 900);
@@ -171,7 +195,29 @@ export function ClientFormPage() {
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
-                onClick={() => updateClient(client.id, { status: 'paused' })}
+                disabled={dangerSubmitting}
+                onClick={async () => {
+                  setFormError(null);
+                  setDangerSubmitting(true);
+                  try {
+                    if (supabase) {
+                      await updateClientInSupabase(client.id, { ...f, status: 'paused' });
+                      await refreshClients();
+                    } else {
+                      updateClient(client.id, { status: 'paused' });
+                    }
+                  } catch (err) {
+                    const msg =
+                      err instanceof Error
+                        ? err.message
+                        : typeof err === 'object' && err !== null && 'message' in err
+                          ? String((err as { message: unknown }).message)
+                          : 'Could not archive client.';
+                    setFormError(msg);
+                  } finally {
+                    setDangerSubmitting(false);
+                  }
+                }}
               >
                 Archive client
               </button>
@@ -179,7 +225,29 @@ export function ClientFormPage() {
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
-                onClick={() => updateClient(client.id, { status: 'active' })}
+                disabled={dangerSubmitting}
+                onClick={async () => {
+                  setFormError(null);
+                  setDangerSubmitting(true);
+                  try {
+                    if (supabase) {
+                      await updateClientInSupabase(client.id, { ...f, status: 'active' });
+                      await refreshClients();
+                    } else {
+                      updateClient(client.id, { status: 'active' });
+                    }
+                  } catch (err) {
+                    const msg =
+                      err instanceof Error
+                        ? err.message
+                        : typeof err === 'object' && err !== null && 'message' in err
+                          ? String((err as { message: unknown }).message)
+                          : 'Could not restore client.';
+                    setFormError(msg);
+                  } finally {
+                    setDangerSubmitting(false);
+                  }
+                }}
               >
                 Restore to active
               </button>
@@ -187,7 +255,8 @@ export function ClientFormPage() {
             <button
               type="button"
               className="btn btn-danger-ghost btn-sm"
-              onClick={() => {
+              disabled={dangerSubmitting}
+              onClick={async () => {
                 if (
                   !window.confirm(
                     `Delete ${client.name} permanently? All session logs and coach-linked bookings for them will be removed. This cannot be undone.`,
@@ -195,7 +264,27 @@ export function ClientFormPage() {
                 ) {
                   return;
                 }
-                deleteClient(client.id);
+                setFormError(null);
+                setDangerSubmitting(true);
+                try {
+                  if (supabase) {
+                    await deleteClientFromSupabase(client.id);
+                    await refreshClients();
+                  } else {
+                    deleteClient(client.id);
+                  }
+                } catch (err) {
+                  const msg =
+                    err instanceof Error
+                      ? err.message
+                      : typeof err === 'object' && err !== null && 'message' in err
+                        ? String((err as { message: unknown }).message)
+                        : 'Could not delete client.';
+                  setFormError(msg);
+                  return;
+                } finally {
+                  setDangerSubmitting(false);
+                }
                 navigate('/clients');
               }}
             >

@@ -14,9 +14,9 @@ import { LoginPage } from './pages/LoginPage';
 
 export default function App() {
   return (
-    <CoachDataProvider>
-      <BrowserRouter>
-        <AuthProvider>
+    <BrowserRouter>
+      <AuthProvider>
+        <CoachDataProvider>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/book" element={<BookingPage />} />
@@ -34,8 +34,8 @@ export default function App() {
               </Route>
             </Route>
           </Routes>
-        </AuthProvider>
-      </BrowserRouter>
-    </CoachDataProvider>
+        </CoachDataProvider>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }

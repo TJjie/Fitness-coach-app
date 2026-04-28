@@ -1,3 +1,4 @@
+import { pickClientRowPrimaryKey } from './clientRowPrimaryKey';
 import { supabase } from './supabaseClient';
 import type { Client, ClientStatus } from '../types/models';
 
@@ -12,8 +13,9 @@ export function mapSupabaseClientRow(row: Record<string, unknown>): Client {
   const startStr = startRaw != null && startRaw !== '' ? String(startRaw) : '';
   const startDate = startStr.length >= 10 ? startStr.slice(0, 10) : startStr;
 
+  const id = pickClientRowPrimaryKey(row) ?? '';
   return {
-    id: String(row.id ?? ''),
+    id,
     name: String(row.name ?? ''),
     email: String(row.email ?? ''),
     phone: String(row.phone ?? ''),

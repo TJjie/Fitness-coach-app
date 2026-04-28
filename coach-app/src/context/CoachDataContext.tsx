@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -16,6 +17,7 @@ import { fetchBookingsFromSupabase } from '../lib/bookingsSupabase';
 import { fetchClientsFromSupabase } from '../lib/fetchClientsFromSupabase';
 import { supabase } from '../lib/supabaseClient';
 import { loadAppState, saveAppState } from '../lib/storage';
+import { useAuth } from './AuthContext';
 
 type Ctx = {
   state: AppState;
@@ -53,6 +55,11 @@ type Ctx = {
 const CoachDataContext = createContext<Ctx | null>(null);
 
 export function CoachDataProvider({ children }: { children: ReactNode }) {
+  const { session, loading: authLoading } = useAuth();
+  const clientsFetchGen = useRef(0);
+  const availabilityFetchGen = useRef(0);
+  const bookingsFetchGen = useRef(0);
+
   const [state, setState] = useState<AppState>(() => {
     const loaded = loadAppState();
     if (supabase) {
@@ -70,12 +77,15 @@ export function CoachDataProvider({ children }: { children: ReactNode }) {
 
   const refreshClients = useCallback(async () => {
     if (!supabase) return;
+    const gen = ++clientsFetchGen.current;
     setClientsFetchError(null);
     setClientsLoading(true);
     try {
       const list = await fetchClientsFromSupabase();
+      if (gen !== clientsFetchGen.current) return;
       setState((s) => ({ ...s, clients: list }));
     } catch (e) {
+      if (gen !== clientsFetchGen.current) return;
       const msg =
         e instanceof Error
           ? e.message
@@ -84,18 +94,23 @@ export function CoachDataProvider({ children }: { children: ReactNode }) {
             : 'Failed to load clients.';
       setClientsFetchError(msg);
     } finally {
-      setClientsLoading(false);
+      if (gen === clientsFetchGen.current) {
+        setClientsLoading(false);
+      }
     }
   }, []);
 
   const refreshAvailability = useCallback(async () => {
     if (!supabase) return;
+    const gen = ++availabilityFetchGen.current;
     setAvailabilityFetchError(null);
     setAvailabilityLoading(true);
     try {
       const list = await fetchAvailabilitySlotsFromSupabase();
+      if (gen !== availabilityFetchGen.current) return;
       setState((s) => ({ ...s, availability: list }));
     } catch (e) {
+      if (gen !== availabilityFetchGen.current) return;
       const msg =
         e instanceof Error
           ? e.message
@@ -104,19 +119,24 @@ export function CoachDataProvider({ children }: { children: ReactNode }) {
             : 'Failed to load availability.';
       setAvailabilityFetchError(msg);
     } finally {
-      setAvailabilityLoading(false);
+      if (gen === availabilityFetchGen.current) {
+        setAvailabilityLoading(false);
+      }
     }
   }, []);
 
   const refreshBookings = useCallback(async (): Promise<Booking[] | undefined> => {
     if (!supabase) return undefined;
+    const gen = ++bookingsFetchGen.current;
     setBookingsFetchError(null);
     setBookingsLoading(true);
     try {
       const list = await fetchBookingsFromSupabase();
+      if (gen !== bookingsFetchGen.current) return undefined;
       setState((s) => ({ ...s, bookings: list }));
       return list;
     } catch (e) {
+      if (gen !== bookingsFetchGen.current) return undefined;
       const msg =
         e instanceof Error
           ? e.message
@@ -126,24 +146,30 @@ export function CoachDataProvider({ children }: { children: ReactNode }) {
       setBookingsFetchError(msg);
       return undefined;
     } finally {
-      setBookingsLoading(false);
+      if (gen === bookingsFetchGen.current) {
+        setBookingsLoading(false);
+      }
     }
   }, []);
 
+  /** Wait for auth hydration before Supabase reads so JWT is attached and responses are not overwritten by stale in-flight requests. */
   useEffect(() => {
-    if (!supabase) return;
-    void Promise.resolve().then(() => refreshClients());
-  }, [refreshClients]);
+    if (!supabase || authLoading) return;
+    void refreshAvailability();
+    void refreshBookings();
+  }, [supabase, authLoading, refreshAvailability, refreshBookings]);
 
   useEffect(() => {
-    if (!supabase) return;
-    void Promise.resolve().then(() => refreshAvailability());
-  }, [refreshAvailability]);
-
-  useEffect(() => {
-    if (!supabase) return;
-    void Promise.resolve().then(() => refreshBookings());
-  }, [refreshBookings]);
+    if (!supabase || authLoading) return;
+    if (session) {
+      void refreshClients();
+    } else {
+      clientsFetchGen.current += 1;
+      setClientsFetchError(null);
+      setClientsLoading(false);
+      setState((s) => ({ ...s, clients: [] }));
+    }
+  }, [supabase, authLoading, session, refreshClients]);
 
   useEffect(() => {
     saveAppState(state, {
