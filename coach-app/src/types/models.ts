@@ -39,6 +39,9 @@ export interface WeeklyAvailability {
 
 export type BookingSource = 'coach' | 'public';
 
+/** Matches `public.bookings.status` after running `bookings_session_lifecycle.sql`. */
+export type BookingStatus = 'confirmed' | 'cancelled' | 'completed' | 'locked';
+
 export interface Booking {
   id: string;
   clientId?: string;
@@ -46,7 +49,7 @@ export interface Booking {
   clientEmail?: string;
   date: string;
   time: string;
-  status: 'confirmed' | 'cancelled';
+  status: BookingStatus;
   source: BookingSource;
   /** Set when row comes from `bookings.availability_slot_id` (public web booking). */
   availabilitySlotId?: string;
@@ -55,6 +58,14 @@ export interface Booking {
    * When set, `date` / `time` are derived from this instant in local time for display only.
    */
   occurrenceStartAt?: string;
+  /** When the booked session ends (DB `session_end_at`); app defaults to start + 1h if absent). */
+  sessionEndAt?: string;
+  /** When the coach marked the session completed (DB `completed_at`). */
+  completedAt?: string;
+  /** When the session was locked (DB `locked_at`). */
+  lockedAt?: string;
+  /** DB `is_locked` (true when status is `locked`). */
+  isLocked?: boolean;
   /** When the booking row was created (DB `created_at`, timestamptz). */
   bookedAt?: string;
 }

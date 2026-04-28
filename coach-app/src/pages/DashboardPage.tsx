@@ -2,11 +2,8 @@ import { Link } from 'react-router-dom';
 import { useMemo } from 'react';
 import { useCoachData } from '../context/CoachDataContext';
 import { clientStatusLabel } from '../lib/clientStatusLabel';
-import {
-  formatLocalDateTimeLine,
-  occurrenceAppleTimeAndDate,
-  occurrenceInstantLocalDate,
-} from '../lib/bookingOccurrence';
+import { formatLocalDateTimeLine, occurrenceAppleTimeAndDate } from '../lib/bookingOccurrence';
+import { isBookingUpcoming } from '../lib/bookingLifecycle';
 import { formatDisplayDate, toISODate } from '../lib/dates';
 
 function initials(name: string) {
@@ -23,9 +20,9 @@ export function DashboardPage() {
   const activeClients = useMemo(() => clients.filter((c) => c.status !== 'paused'), [clients]);
   const today = toISODate(new Date());
 
+  const nowMs = Date.now();
   const upcoming = state.bookings
-    .filter((b) => b.status === 'confirmed' && b.occurrenceStartAt)
-    .filter((b) => occurrenceInstantLocalDate(b.occurrenceStartAt!) >= today)
+    .filter((b) => b.occurrenceStartAt && isBookingUpcoming(b, nowMs))
     .sort((a, b) => new Date(a.occurrenceStartAt!).getTime() - new Date(b.occurrenceStartAt!).getTime())
     .slice(0, 6);
 

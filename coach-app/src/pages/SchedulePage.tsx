@@ -8,8 +8,15 @@ import {
 import {
   cancelBookingInSupabase,
   insertCoachBookingFromSupabase,
+  lockBookingInSupabase,
+  markBookingCompletedInSupabase,
   updateCoachBookingInSupabase,
 } from '../lib/bookingsSupabase';
+import {
+  isBookingNeedsConfirmation,
+  isBookingUpcoming,
+  isTerminalBookingStatus,
+} from '../lib/bookingLifecycle';
 import { logSupabaseError } from '../lib/supabaseErrorLog';
 import { parseISODate, toISODate } from '../lib/dates';
 import {
@@ -18,11 +25,10 @@ import {
   occurrenceAppleTimeAndDate,
   occurrenceInstantLocalDate,
   occurrenceInstantLocalTimeHHmm,
-  occurrenceInstantsEqual,
 } from '../lib/bookingOccurrence';
-import { isOccurrenceBooked, weekdayShort } from '../lib/bookingSlots';
+import { isOccurrenceBooked, isSlotTakenByActiveBooking, weekdayShort } from '../lib/bookingSlots';
 import { supabase } from '../lib/supabaseClient';
-import type { Booking, Client, WeeklyAvailability } from '../types/models';
+import type { Booking, BookingStatus, Client, WeeklyAvailability } from '../types/models';
 
 const DAYS = [
   { v: 0, l: 'Sunday' },
@@ -51,22 +57,6 @@ function formatPostgrestError(err: unknown, fallback: string): string {
   return base;
 }
 
-function slotTaken(
-  bookings: Booking[],
-  date: string,
-  time: string,
-  exceptId?: string,
-): boolean {
-  const target = buildOccurrenceStartIsoFromLocalDateAndTimeLabel(date, time);
-  return bookings.some(
-    (b) =>
-      b.status === 'confirmed' &&
-      b.id !== exceptId &&
-      Boolean(b.occurrenceStartAt) &&
-      occurrenceInstantsEqual(b.occurrenceStartAt!, target),
-  );
-}
-
 export function SchedulePage() {
   const {
     state,
@@ -91,8 +81,9 @@ export function SchedulePage() {
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [slotActionError, setSlotActionError] = useState<string | null>(null);
   const [bookingActionError, setBookingActionError] = useState<string | null>(null);
-
-  const today = toISODate(new Date());
+  const [completingId, setCompletingId] = useState<string | null>(null);
+  const [lockingId, setLockingId] = useState<string | null>(null);
+  const [scheduleClock, setScheduleClock] = useState(0);
 
   useEffect(() => {
     if (!supabase) return;
@@ -106,25 +97,41 @@ export function SchedulePage() {
     return () => document.removeEventListener('visibilitychange', onVis);
   }, [supabase, refreshAvailability, refreshBookings]);
 
+  useEffect(() => {
+    const id = window.setInterval(() => setScheduleClock((c) => c + 1), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const nowMs = useMemo(() => Date.now(), [scheduleClock, state.bookings]);
+
   const upcoming = useMemo(() => {
     return state.bookings
-      .filter((b) => {
-        if (b.status !== 'confirmed' || !b.occurrenceStartAt) return false;
-        return occurrenceInstantLocalDate(b.occurrenceStartAt) >= today;
-      })
+      .filter((b) => b.occurrenceStartAt && isBookingUpcoming(b, nowMs))
       .sort((a, b) => new Date(a.occurrenceStartAt!).getTime() - new Date(b.occurrenceStartAt!).getTime());
-  }, [state.bookings, today]);
+  }, [state.bookings, nowMs]);
+
+  const needsConfirmation = useMemo(() => {
+    return state.bookings
+      .filter((b) => b.occurrenceStartAt && isBookingNeedsConfirmation(b, nowMs))
+      .sort((a, b) => new Date(a.occurrenceStartAt!).getTime() - new Date(b.occurrenceStartAt!).getTime());
+  }, [state.bookings, nowMs]);
+
+  const pastArchive = useMemo(() => {
+    return state.bookings
+      .filter((b) => isTerminalBookingStatus(b))
+      .sort((a, b) => new Date(a.occurrenceStartAt ?? a.date).getTime() - new Date(b.occurrenceStartAt ?? b.date).getTime());
+  }, [state.bookings]);
 
   const upcomingWebCountBySlotId = useMemo(() => {
     const m = new Map<string, number>();
     for (const b of state.bookings) {
       if (b.status !== 'confirmed' || !b.availabilitySlotId || !b.occurrenceStartAt) continue;
-      if (occurrenceInstantLocalDate(b.occurrenceStartAt) < today) continue;
+      if (!isBookingUpcoming(b, nowMs)) continue;
       const id = b.availabilitySlotId;
       m.set(id, (m.get(id) ?? 0) + 1);
     }
     return m;
-  }, [state.bookings, today]);
+  }, [state.bookings, nowMs]);
 
   const bookLink = typeof window !== 'undefined' ? `${window.location.origin}/book` : '/book';
 
@@ -191,6 +198,42 @@ export function SchedulePage() {
       setBookingActionError(errMessage(err, 'Could not cancel booking.'));
     }
   };
+
+  const onMarkCompleted = async (bookingId: string) => {
+    if (!supabase) return;
+    setBookingActionError(null);
+    setCompletingId(bookingId);
+    try {
+      await markBookingCompletedInSupabase(bookingId);
+      await refreshBookings();
+    } catch (err) {
+      logSupabaseError('schedule:mark-completed', err);
+      setBookingActionError(formatPostgrestError(err, 'Could not mark as completed.'));
+    } finally {
+      setCompletingId(null);
+    }
+  };
+
+  const onLockSession = async (bookingId: string) => {
+    if (!supabase) return;
+    setBookingActionError(null);
+    setLockingId(bookingId);
+    try {
+      await lockBookingInSupabase(bookingId);
+      await refreshBookings();
+    } catch (err) {
+      logSupabaseError('schedule:lock-session', err);
+      setBookingActionError(formatPostgrestError(err, 'Could not lock session.'));
+    } finally {
+      setLockingId(null);
+    }
+  };
+
+  const bookingStatusLabel = (s: BookingStatus) =>
+    s === 'confirmed' ? 'Confirmed' : s === 'cancelled' ? 'Cancelled' : s === 'completed' ? 'Completed' : 'Locked';
+
+  const bookingStatusTagClass = (s: BookingStatus) =>
+    s === 'confirmed' ? 'tag-active' : s === 'completed' ? 'tag-follow' : s === 'locked' ? 'tag-muted' : 'tag-paused';
 
   return (
     <>
@@ -330,13 +373,15 @@ export function SchedulePage() {
         </button>
       </div>
 
-      <div className="card">
-        {supabase && bookingsLoading && upcoming.length === 0 ? (
+      <div className="card" style={{ marginBottom: 16 }}>
+        {supabase && bookingsLoading && state.bookings.length === 0 ? (
           <p className="empty" style={{ padding: '12px 0' }} role="status">
             Loading bookings…
           </p>
         ) : upcoming.length === 0 ? (
-          <p className="empty" style={{ padding: '12px 0' }}>No confirmed bookings ahead.</p>
+          <p className="empty" style={{ padding: '12px 0' }}>
+            No upcoming sessions. Bookings move here only while the session window (end time) is still in the future.
+          </p>
         ) : (
           upcoming.map((b) => {
             const whenIso = b.occurrenceStartAt!;
@@ -360,8 +405,8 @@ export function SchedulePage() {
                       {b.source === 'public' ? 'Web' : 'Coach'}
                     </span>
                     <span className="tag-muted">Status</span>
-                    <span className={`tag ${b.status === 'confirmed' ? 'tag-active' : 'tag-paused'}`} style={{ fontSize: 11 }}>
-                      {b.status === 'confirmed' ? 'Confirmed' : b.status}
+                    <span className={`tag ${bookingStatusTagClass(b.status)}`} style={{ fontSize: 11 }}>
+                      {bookingStatusLabel(b.status)}
                     </span>
                   </div>
                 </div>
@@ -369,9 +414,131 @@ export function SchedulePage() {
                   <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditBooking(b)}>
                     Edit
                   </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    disabled={completingId === b.id}
+                    onClick={() => void onMarkCompleted(b.id)}
+                  >
+                    {completingId === b.id ? 'Saving…' : 'Mark completed'}
+                  </button>
                   <button type="button" className="btn btn-danger-ghost btn-sm" onClick={() => void onCancelBooking(b.id)}>
                     Cancel
                   </button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      <h2 className="dash-section-label" style={{ margin: '0 0 10px' }}>
+        Needs confirmation
+      </h2>
+      <p className="page-sub" style={{ margin: '0 0 12px' }}>
+        Session end time has passed — mark completed once you have held the session, or cancel if it did not happen.
+      </p>
+      <div className="card" style={{ marginBottom: 16 }}>
+        {needsConfirmation.length === 0 ? (
+          <p className="empty" style={{ padding: '12px 0' }}>Nothing waiting on past sessions.</p>
+        ) : (
+          needsConfirmation.map((b) => {
+            const whenIso = b.occurrenceStartAt!;
+            const { time, date } = occurrenceAppleTimeAndDate(whenIso);
+            return (
+              <div key={b.id} className="reminder-row" style={{ cursor: 'default' }}>
+                <div className="reminder-timecol">
+                  <span className="reminder-time">{time}</span>
+                  <span className="reminder-date">{date}</span>
+                </div>
+                <div className="reminder-body">
+                  <div className="reminder-title">{b.clientName}</div>
+                  <div className="reminder-meta">
+                    {b.clientEmail ?? '—'}
+                    <span className="dash-muted-dot"> · </span>
+                    Booked {b.bookedAt ? formatLocalDateTimeLine(b.bookedAt) : '—'}
+                  </div>
+                  <div className="booking-inline-tags">
+                    <span className="tag-muted">Source</span>
+                    <span className="tag" style={{ fontSize: 11 }}>
+                      {b.source === 'public' ? 'Web' : 'Coach'}
+                    </span>
+                    <span className="tag-muted">Status</span>
+                    <span className={`tag ${bookingStatusTagClass(b.status)}`} style={{ fontSize: 11 }}>
+                      {bookingStatusLabel(b.status)}
+                    </span>
+                  </div>
+                </div>
+                <div className="reminder-actions">
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditBooking(b)}>
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    disabled={completingId === b.id}
+                    onClick={() => void onMarkCompleted(b.id)}
+                  >
+                    {completingId === b.id ? 'Saving…' : 'Mark completed'}
+                  </button>
+                  <button type="button" className="btn btn-danger-ghost btn-sm" onClick={() => void onCancelBooking(b.id)}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      <h2 className="dash-section-label" style={{ margin: '0 0 10px' }}>
+        Past &amp; archive
+      </h2>
+      <p className="page-sub" style={{ margin: '0 0 12px' }}>
+        Completed, locked, and cancelled bookings. Lock a completed row to freeze it as a record.
+      </p>
+      <div className="card">
+        {pastArchive.length === 0 ? (
+          <p className="empty" style={{ padding: '12px 0' }}>No archived bookings yet.</p>
+        ) : (
+          pastArchive.map((b) => {
+            const whenIso = b.occurrenceStartAt ?? buildOccurrenceStartIsoFromLocalDateAndTimeLabel(b.date, b.time);
+            const { time, date } = occurrenceAppleTimeAndDate(whenIso);
+            return (
+              <div key={b.id} className="reminder-row" style={{ cursor: 'default' }}>
+                <div className="reminder-timecol">
+                  <span className="reminder-time">{time}</span>
+                  <span className="reminder-date">{date}</span>
+                </div>
+                <div className="reminder-body">
+                  <div className="reminder-title">{b.clientName}</div>
+                  <div className="reminder-meta">
+                    {b.clientEmail ?? '—'}
+                    <span className="dash-muted-dot"> · </span>
+                    Booked {b.bookedAt ? formatLocalDateTimeLine(b.bookedAt) : '—'}
+                  </div>
+                  <div className="booking-inline-tags">
+                    <span className="tag-muted">Source</span>
+                    <span className="tag" style={{ fontSize: 11 }}>
+                      {b.source === 'public' ? 'Web' : 'Coach'}
+                    </span>
+                    <span className="tag-muted">Status</span>
+                    <span className={`tag ${bookingStatusTagClass(b.status)}`} style={{ fontSize: 11 }}>
+                      {bookingStatusLabel(b.status)}
+                    </span>
+                  </div>
+                </div>
+                <div className="reminder-actions">
+                  {b.status === 'completed' ? (
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      disabled={lockingId === b.id}
+                      onClick={() => void onLockSession(b.id)}
+                    >
+                      {lockingId === b.id ? 'Locking…' : 'Lock session'}
+                    </button>
+                  ) : null}
                 </div>
               </div>
             );
@@ -464,7 +631,7 @@ export function SchedulePage() {
             if (dateChanged || timeChanged) {
               const d = patch.date ?? editBooking.date;
               const t = patch.time ?? editBooking.time;
-              if (slotTaken(bookingsForCheck, d, t, editBooking.id)) {
+              if (isSlotTakenByActiveBooking(bookingsForCheck, d, t, editBooking.id)) {
                 setBookingActionError('That slot is already taken.');
                 return;
               }
@@ -489,7 +656,7 @@ export function SchedulePage() {
               setEditBooking(null);
             } catch (err) {
               logSupabaseError('schedule:edit-booking', err);
-              setBookingActionError(errMessage(err, 'Could not update booking.'));
+              setBookingActionError(formatPostgrestError(err, 'Could not update booking.'));
             }
           }}
         />

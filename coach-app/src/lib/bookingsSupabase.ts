@@ -1,6 +1,7 @@
 import { occurrenceInstantLocalDate, occurrenceInstantLocalTimeHHmm } from './bookingOccurrence';
+import { defaultSessionEndIso } from './bookingLifecycle';
 import { supabase } from './supabaseClient';
-import type { Booking, BookingSource } from '../types/models';
+import type { Booking, BookingSource, BookingStatus } from '../types/models';
 
 /** PK column for `.eq(...)` filters (must match insert/select mapping). */
 export function getBookingPkColumnName(): string {
@@ -49,6 +50,23 @@ function parseClientId(row: Record<string, unknown>): string | undefined {
   return String(raw);
 }
 
+function parseIsoField(raw: unknown): string | undefined {
+  if (raw == null || raw === '') return undefined;
+  const d = new Date(String(raw));
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d.toISOString();
+}
+
+function parseBookingStatus(raw: unknown): BookingStatus {
+  const s = String(raw ?? '')
+    .trim()
+    .toLowerCase();
+  if (s === 'cancelled') return 'cancelled';
+  if (s === 'completed') return 'completed';
+  if (s === 'locked') return 'locked';
+  return 'confirmed';
+}
+
 /**
  * Map a `public.bookings` row to the app `Booking` shape.
  * Uses only `occurrence_start_at` for calendar date and time (single source of truth).
@@ -61,8 +79,7 @@ export function mapBookingRow(row: Record<string, unknown>): Booking | null {
   const id = pickBookingRowPrimaryKey(row);
   if (!id) return null;
 
-  const statusRaw = row.status;
-  const status: Booking['status'] = statusRaw === 'cancelled' ? 'cancelled' : 'confirmed';
+  const status = parseBookingStatus(row.status);
 
   const slotIdRaw = row.availability_slot_id;
   const slotId = slotIdRaw != null && String(slotIdRaw).length > 0 ? String(slotIdRaw) : '';
@@ -71,6 +88,10 @@ export function mapBookingRow(row: Record<string, unknown>): Booking | null {
   const time = occurrenceInstantLocalTimeHHmm(occurrenceStartAt);
 
   const bookedAt = parseCreatedAtFromRow(row);
+  const sessionEndAt = parseIsoField(row.session_end_at);
+  const completedAt = parseIsoField(row.completed_at);
+  const lockedAt = parseIsoField(row.locked_at);
+  const isLocked = row.is_locked === true || row.is_locked === 'true' || status === 'locked';
 
   return {
     id,
@@ -83,6 +104,10 @@ export function mapBookingRow(row: Record<string, unknown>): Booking | null {
     source: parseBookingSource(row),
     availabilitySlotId: slotId || undefined,
     occurrenceStartAt,
+    sessionEndAt,
+    completedAt,
+    lockedAt,
+    isLocked: Boolean(isLocked),
     bookedAt,
   };
 }
@@ -130,6 +155,7 @@ export async function insertPublicBookingFromSupabase(input: {
       email: input.email.length > 0 ? input.email : null,
       status: 'confirmed',
       occurrence_start_at: input.occurrenceStartAt,
+      session_end_at: defaultSessionEndIso(input.occurrenceStartAt),
     })
     .select('*');
 
@@ -165,6 +191,7 @@ export async function insertCoachBookingFromSupabase(input: {
     email: input.clientEmail?.trim()?.length ? input.clientEmail.trim() : null,
     status: 'confirmed',
     occurrence_start_at: input.occurrenceStartAt,
+    session_end_at: defaultSessionEndIso(input.occurrenceStartAt),
   };
   if (input.availabilitySlotId) {
     insertRow.availability_slot_id = input.availabilitySlotId;
@@ -206,6 +233,7 @@ export async function updateCoachBookingInSupabase(
     full_name: input.clientName.trim(),
     email: input.clientEmail?.trim()?.length ? input.clientEmail.trim() : null,
     occurrence_start_at: input.occurrenceStartAt,
+    session_end_at: defaultSessionEndIso(input.occurrenceStartAt),
   };
   if (input.availabilitySlotId !== undefined) {
     updates.availability_slot_id = input.availabilitySlotId || null;
@@ -223,4 +251,49 @@ export async function cancelBookingInSupabase(bookingId: string): Promise<void> 
   const pk = getBookingPkColumnName();
   const { error } = await supabase.from('bookings').update({ status: 'cancelled' }).eq(pk, bookingId);
   if (error) throw error;
+}
+
+export async function markBookingCompletedInSupabase(bookingId: string): Promise<void> {
+  if (!supabase) {
+    throw new Error('Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
+  }
+
+  const pk = getBookingPkColumnName();
+  const completedAt = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('bookings')
+    .update({
+      status: 'completed',
+      completed_at: completedAt,
+    })
+    .eq(pk, bookingId)
+    .eq('status', 'confirmed')
+    .select('id');
+  if (error) throw error;
+  if (rowsFromInsertData(data).length === 0) {
+    throw new Error('No matching confirmed booking was updated (wrong id or status is not confirmed).');
+  }
+}
+
+export async function lockBookingInSupabase(bookingId: string): Promise<void> {
+  if (!supabase) {
+    throw new Error('Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
+  }
+
+  const pk = getBookingPkColumnName();
+  const lockedAt = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('bookings')
+    .update({
+      status: 'locked',
+      is_locked: true,
+      locked_at: lockedAt,
+    })
+    .eq(pk, bookingId)
+    .eq('status', 'completed')
+    .select('id');
+  if (error) throw error;
+  if (rowsFromInsertData(data).length === 0) {
+    throw new Error('No matching completed booking was updated (mark completed first, or wrong id).');
+  }
 }

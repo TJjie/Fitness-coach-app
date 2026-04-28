@@ -23,6 +23,23 @@ export function isOccurrenceBooked(bookings: Booking[], occurrenceStartAt: strin
   });
 }
 
+/** True if this calendar slot is taken by an active (confirmed) booking. */
+export function isSlotTakenByActiveBooking(
+  bookings: Booking[],
+  date: string,
+  time: string,
+  exceptId?: string,
+): boolean {
+  const target = buildOccurrenceStartIsoFromLocalDateAndTimeLabel(date, time);
+  return bookings.some(
+    (b) =>
+      b.status === 'confirmed' &&
+      b.id !== exceptId &&
+      Boolean(b.occurrenceStartAt) &&
+      occurrenceInstantsEqual(b.occurrenceStartAt!, target),
+  );
+}
+
 export function listOpenSlots(
   availability: WeeklyAvailability[],
   bookings: Booking[],
