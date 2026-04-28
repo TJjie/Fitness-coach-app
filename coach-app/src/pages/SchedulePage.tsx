@@ -1,10 +1,16 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useCoachData } from '../context/CoachDataContext';
 import {
   deleteAvailabilitySlotFromSupabase,
   insertAvailabilitySlotToSupabase,
 } from '../lib/availabilitySlotsSupabase';
+import {
+  cancelBookingInSupabase,
+  insertCoachBookingFromSupabase,
+  updateCoachBookingInSupabase,
+} from '../lib/bookingsSupabase';
+import { logSupabaseError } from '../lib/supabaseErrorLog';
 import { parseISODate, toISODate } from '../lib/dates';
 import {
   buildOccurrenceStartIsoFromLocalDateAndTimeLabel,
@@ -14,7 +20,7 @@ import {
   occurrenceInstantLocalTimeHHmm,
   occurrenceInstantsEqual,
 } from '../lib/bookingOccurrence';
-import { weekdayShort } from '../lib/bookingSlots';
+import { isOccurrenceBooked, weekdayShort } from '../lib/bookingSlots';
 import { supabase } from '../lib/supabaseClient';
 import type { Booking, Client, WeeklyAvailability } from '../types/models';
 
@@ -27,6 +33,23 @@ const DAYS = [
   { v: 5, l: 'Friday' },
   { v: 6, l: 'Saturday' },
 ];
+
+function errMessage(err: unknown, fallback: string): string {
+  return err instanceof Error
+    ? err.message
+    : typeof err === 'object' && err !== null && 'message' in err
+      ? String((err as { message: unknown }).message)
+      : fallback;
+}
+
+function formatPostgrestError(err: unknown, fallback: string): string {
+  const base = errMessage(err, fallback);
+  if (typeof err === 'object' && err !== null && 'code' in err) {
+    const c = (err as { code: unknown }).code;
+    if (c != null && String(c).length > 0) return `${base} (code ${String(c)})`;
+  }
+  return base;
+}
 
 function slotTaken(
   bookings: Booking[],
@@ -67,8 +90,21 @@ export function SchedulePage() {
   const [addingSlot, setAddingSlot] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [slotActionError, setSlotActionError] = useState<string | null>(null);
+  const [bookingActionError, setBookingActionError] = useState<string | null>(null);
 
   const today = toISODate(new Date());
+
+  useEffect(() => {
+    if (!supabase) return;
+    const onVis = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshAvailability();
+        void refreshBookings();
+      }
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [supabase, refreshAvailability, refreshBookings]);
 
   const upcoming = useMemo(() => {
     return state.bookings
@@ -113,16 +149,11 @@ export function SchedulePage() {
     }
     setAddingSlot(true);
     try {
-      const id = await insertAvailabilitySlotToSupabase({ dayOfWeek: day, timeLabel: time });
-      addAvailability({ dayOfWeek: day, time, id });
+      await insertAvailabilitySlotToSupabase({ dayOfWeek: day, timeLabel: time });
+      await refreshAvailability();
     } catch (err) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : typeof err === 'object' && err !== null && 'message' in err
-            ? String((err as { message: unknown }).message)
-            : 'Could not add slot.';
-      setSlotActionError(msg);
+      logSupabaseError('schedule:add-slot', err);
+      setSlotActionError(errMessage(err, 'Could not add slot.'));
     } finally {
       setAddingSlot(false);
     }
@@ -137,17 +168,27 @@ export function SchedulePage() {
     setRemovingId(slotId);
     try {
       await deleteAvailabilitySlotFromSupabase(slotId);
-      removeAvailability(slotId);
+      await refreshAvailability();
     } catch (err) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : typeof err === 'object' && err !== null && 'message' in err
-            ? String((err as { message: unknown }).message)
-            : 'Could not remove slot.';
-      setSlotActionError(msg);
+      logSupabaseError('schedule:remove-slot', err);
+      setSlotActionError(errMessage(err, 'Could not remove slot.'));
     } finally {
       setRemovingId(null);
+    }
+  };
+
+  const onCancelBooking = async (bookingId: string) => {
+    setBookingActionError(null);
+    if (!supabase) {
+      cancelBooking(bookingId);
+      return;
+    }
+    try {
+      await cancelBookingInSupabase(bookingId);
+      await refreshBookings();
+    } catch (err) {
+      logSupabaseError('schedule:cancel-booking', err);
+      setBookingActionError(errMessage(err, 'Could not cancel booking.'));
     }
   };
 
@@ -271,6 +312,15 @@ export function SchedulePage() {
         </div>
       ) : null}
 
+      {supabase && bookingActionError ? (
+        <div className="card" style={{ marginBottom: 16 }} role="alert">
+          <p style={{ margin: '0 0 10px', fontSize: 14, color: 'var(--danger)' }}>{bookingActionError}</p>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => setBookingActionError(null)}>
+            Dismiss
+          </button>
+        </div>
+      ) : null}
+
       <div className="row-between" style={{ marginBottom: 10 }}>
         <h2 className="dash-section-label" style={{ margin: 0 }}>
           Upcoming bookings
@@ -319,7 +369,7 @@ export function SchedulePage() {
                   <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditBooking(b)}>
                     Edit
                   </button>
-                  <button type="button" className="btn btn-danger-ghost btn-sm" onClick={() => cancelBooking(b.id)}>
+                  <button type="button" className="btn btn-danger-ghost btn-sm" onClick={() => void onCancelBooking(b.id)}>
                     Cancel
                   </button>
                 </div>
@@ -334,10 +384,60 @@ export function SchedulePage() {
           clients={bookableClients}
           availability={state.availability}
           onClose={() => setShowBook(false)}
-          onSave={(payload) => {
-            const created = addBooking(payload);
-            if (created) setShowBook(false);
-            else alert('That slot is already booked.');
+          onSave={async (payload) => {
+            setBookingActionError(null);
+            if (!supabase) {
+              const created = addBooking(payload);
+              if (!created) {
+                setBookingActionError('That slot is already booked.');
+                return;
+              }
+              setShowBook(false);
+              return;
+            }
+            try {
+              const latest = await refreshBookings();
+              if (latest === undefined) {
+                setBookingActionError('Could not verify availability. Try again.');
+                return;
+              }
+              if (isOccurrenceBooked(latest, payload.occurrenceStartAt)) {
+                setBookingActionError('That slot is already booked.');
+                return;
+              }
+
+              // Cloud path: persist in Supabase only (no addBooking / local-only success).
+              await insertCoachBookingFromSupabase({
+                clientName: payload.clientName,
+                clientEmail: payload.clientEmail,
+                occurrenceStartAt: payload.occurrenceStartAt,
+                availabilitySlotId: payload.availabilitySlotId,
+              });
+
+              const after = await refreshBookings();
+              if (after === undefined) {
+                setBookingActionError(
+                  'Booking may have saved but the list could not reload. Refresh the page or check the bookings table in Supabase.',
+                );
+                logSupabaseError('schedule:manual-booking-refresh-after-insert', new Error('refreshBookings returned undefined'));
+                return;
+              }
+              if (!isOccurrenceBooked(after, payload.occurrenceStartAt)) {
+                setBookingActionError(
+                  'Save did not appear after reload. If there is no new row in Supabase, INSERT is blocked by RLS. If a row exists, SELECT policies may hide it, or timestamps may not match (check occurrence_start_at in UTC).',
+                );
+                logSupabaseError(
+                  'schedule:manual-booking-verify',
+                  new Error(`Expected occurrence ${payload.occurrenceStartAt}; ${after.length} bookings loaded`),
+                );
+                return;
+              }
+
+              setShowBook(false);
+            } catch (err) {
+              logSupabaseError('schedule:manual-booking', err);
+              setBookingActionError(formatPostgrestError(err, 'Could not save booking.'));
+            }
           }}
         />
       )}
@@ -348,20 +448,49 @@ export function SchedulePage() {
           clients={clients}
           availability={state.availability}
           onClose={() => setEditBooking(null)}
-          onSave={(patch) => {
-            if (
-              (patch.date && patch.date !== editBooking.date) ||
-              (patch.time && patch.time !== editBooking.time)
-            ) {
+          onSave={async (patch) => {
+            setBookingActionError(null);
+            const dateChanged = Boolean(patch.date && patch.date !== editBooking.date);
+            const timeChanged = Boolean(patch.time && patch.time !== editBooking.time);
+            let bookingsForCheck = state.bookings;
+            if (supabase && (dateChanged || timeChanged)) {
+              const latest = await refreshBookings();
+              if (latest === undefined) {
+                setBookingActionError('Could not verify calendar. Try again.');
+                return;
+              }
+              bookingsForCheck = latest;
+            }
+            if (dateChanged || timeChanged) {
               const d = patch.date ?? editBooking.date;
               const t = patch.time ?? editBooking.time;
-              if (slotTaken(state.bookings, d, t, editBooking.id)) {
-                alert('That slot is already taken.');
+              if (slotTaken(bookingsForCheck, d, t, editBooking.id)) {
+                setBookingActionError('That slot is already taken.');
                 return;
               }
             }
-            updateBooking(editBooking.id, patch);
-            setEditBooking(null);
+            if (!supabase) {
+              updateBooking(editBooking.id, patch);
+              setEditBooking(null);
+              return;
+            }
+            const merged: Booking = { ...editBooking, ...patch };
+            const occ =
+              merged.occurrenceStartAt ??
+              buildOccurrenceStartIsoFromLocalDateAndTimeLabel(merged.date, merged.time);
+            try {
+              await updateCoachBookingInSupabase(editBooking.id, {
+                clientName: merged.clientName,
+                clientEmail: merged.clientEmail,
+                occurrenceStartAt: occ,
+                availabilitySlotId: merged.availabilitySlotId,
+              });
+              await refreshBookings();
+              setEditBooking(null);
+            } catch (err) {
+              logSupabaseError('schedule:edit-booking', err);
+              setBookingActionError(errMessage(err, 'Could not update booking.'));
+            }
           }}
         />
       )}
@@ -387,8 +516,9 @@ function ManualBookingModal({
     source: 'coach';
     occurrenceStartAt: string;
     availabilitySlotId?: string;
-  }) => void;
+  }) => void | Promise<void>;
 }) {
+  const [saving, setSaving] = useState(false);
   const [clientId, setClientId] = useState(clients[0]?.id ?? '');
   const [date, setDate] = useState(toISODate(new Date()));
   const client = clients.find((c) => c.id === clientId);
@@ -472,25 +602,32 @@ function ManualBookingModal({
           <button
             type="button"
             className="btn btn-primary"
-            disabled={!client}
+            disabled={!client || saving}
             onClick={() => {
               if (!client) return;
-              const occurrenceStartAt = buildOccurrenceStartIsoFromLocalDateAndTimeLabel(date, time);
-              const dow = parseISODate(date).getDay();
-              const matching = availability.filter((a) => a.dayOfWeek === dow && a.time === time);
-              onSave({
-                clientId: client.id,
-                clientName: client.name,
-                clientEmail: client.email,
-                date,
-                time,
-                source: 'coach',
-                occurrenceStartAt,
-                availabilitySlotId: matching.length === 1 ? matching[0].id : undefined,
-              });
+              void (async () => {
+                setSaving(true);
+                try {
+                  const occurrenceStartAt = buildOccurrenceStartIsoFromLocalDateAndTimeLabel(date, time);
+                  const dow = parseISODate(date).getDay();
+                  const matching = availability.filter((a) => a.dayOfWeek === dow && a.time === time);
+                  await onSave({
+                    clientId: client.id,
+                    clientName: client.name,
+                    clientEmail: client.email,
+                    date,
+                    time,
+                    source: 'coach',
+                    occurrenceStartAt,
+                    availabilitySlotId: matching.length === 1 ? matching[0].id : undefined,
+                  });
+                } finally {
+                  setSaving(false);
+                }
+              })();
             }}
           >
-            Save booking
+            {saving ? 'Saving…' : 'Save booking'}
           </button>
         </div>
       </div>
@@ -517,8 +654,9 @@ function EditBookingModal({
   clients: Client[];
   availability: WeeklyAvailability[];
   onClose: () => void;
-  onSave: (patch: Partial<Booking>) => void;
+  onSave: (patch: Partial<Booking>) => void | Promise<void>;
 }) {
+  const [saving, setSaving] = useState(false);
   const [bookedBy, setBookedBy] = useState(booking.clientName);
   const [date, setDate] = useState(
     booking.occurrenceStartAt ? occurrenceInstantLocalDate(booking.occurrenceStartAt) : booking.date,
@@ -593,27 +731,34 @@ function EditBookingModal({
           <button
             type="button"
             className="btn btn-primary"
-            disabled={!bookedBy.trim()}
+            disabled={!bookedBy.trim() || saving}
             onClick={() => {
-              const occurrenceStartAt = buildOccurrenceStartIsoFromLocalDateAndTimeLabel(date, time);
-              const dow = parseISODate(date).getDay();
-              const matching = availability.filter((a) => a.dayOfWeek === dow && a.time === time);
-              const availabilitySlotId =
-                matching.length === 1 ? matching[0].id : booking.availabilitySlotId;
-              const name = bookedBy.trim();
-              const rosterMatch = resolveClientFromBookedByName(clients, name);
-              onSave({
-                clientName: name,
-                clientId: rosterMatch?.id,
-                clientEmail: rosterMatch?.email ?? booking.clientEmail,
-                date,
-                time,
-                occurrenceStartAt,
-                availabilitySlotId,
-              });
+              void (async () => {
+                setSaving(true);
+                try {
+                  const occurrenceStartAt = buildOccurrenceStartIsoFromLocalDateAndTimeLabel(date, time);
+                  const dow = parseISODate(date).getDay();
+                  const matching = availability.filter((a) => a.dayOfWeek === dow && a.time === time);
+                  const availabilitySlotId =
+                    matching.length === 1 ? matching[0].id : booking.availabilitySlotId;
+                  const name = bookedBy.trim();
+                  const rosterMatch = resolveClientFromBookedByName(clients, name);
+                  await onSave({
+                    clientName: name,
+                    clientId: rosterMatch?.id,
+                    clientEmail: rosterMatch?.email ?? booking.clientEmail,
+                    date,
+                    time,
+                    occurrenceStartAt,
+                    availabilitySlotId,
+                  });
+                } finally {
+                  setSaving(false);
+                }
+              })();
             }}
           >
-            Save
+            {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
       </div>

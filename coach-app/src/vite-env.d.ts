@@ -5,6 +5,10 @@ interface ImportMetaEnv {
   readonly VITE_SUPABASE_ANON_KEY?: string;
   /** Primary key column on `clients` if not `id` (e.g. `client_id`, `uuid`). */
   readonly VITE_SUPABASE_CLIENTS_ID_COLUMN?: string;
+  /** Primary key on `availability_slots` if not `id`. */
+  readonly VITE_SUPABASE_AVAILABILITY_SLOTS_ID_COLUMN?: string;
+  /** Primary key on `bookings` if not `id`. */
+  readonly VITE_SUPABASE_BOOKINGS_ID_COLUMN?: string;
 }
 
 interface ImportMeta {

@@ -15,6 +15,7 @@ import { isOccurrenceBooked } from '../lib/bookingSlots';
 import { fetchAvailabilitySlotsFromSupabase } from '../lib/availabilitySlotsSupabase';
 import { fetchBookingsFromSupabase } from '../lib/bookingsSupabase';
 import { fetchClientsFromSupabase } from '../lib/fetchClientsFromSupabase';
+import { logSupabaseError } from '../lib/supabaseErrorLog';
 import { supabase } from '../lib/supabaseClient';
 import { loadAppState, saveAppState } from '../lib/storage';
 import { useAuth } from './AuthContext';
@@ -86,6 +87,7 @@ export function CoachDataProvider({ children }: { children: ReactNode }) {
       setState((s) => ({ ...s, clients: list }));
     } catch (e) {
       if (gen !== clientsFetchGen.current) return;
+      logSupabaseError('fetchClients', e);
       const msg =
         e instanceof Error
           ? e.message
@@ -111,6 +113,7 @@ export function CoachDataProvider({ children }: { children: ReactNode }) {
       setState((s) => ({ ...s, availability: list }));
     } catch (e) {
       if (gen !== availabilityFetchGen.current) return;
+      logSupabaseError('fetchAvailability', e);
       const msg =
         e instanceof Error
           ? e.message
@@ -137,6 +140,7 @@ export function CoachDataProvider({ children }: { children: ReactNode }) {
       return list;
     } catch (e) {
       if (gen !== bookingsFetchGen.current) return undefined;
+      logSupabaseError('fetchBookings', e);
       const msg =
         e instanceof Error
           ? e.message
@@ -152,12 +156,15 @@ export function CoachDataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  /** Wait for auth hydration before Supabase reads so JWT is attached and responses are not overwritten by stale in-flight requests. */
+  /**
+   * Refetch schedule-related tables after auth is ready and whenever the session changes
+   * so another device’s writes appear after login and JWT-backed RLS sees the right role.
+   */
   useEffect(() => {
     if (!supabase || authLoading) return;
     void refreshAvailability();
     void refreshBookings();
-  }, [supabase, authLoading, refreshAvailability, refreshBookings]);
+  }, [supabase, authLoading, session?.user?.id, refreshAvailability, refreshBookings]);
 
   useEffect(() => {
     if (!supabase || authLoading) return;
